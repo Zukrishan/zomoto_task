@@ -1,0 +1,27 @@
+{
+  "name": "Zomoto Tasks",
+  "short_name": "Zomoto",
+  "description": "Restaurant Task Management System",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F4F4F5",
+  "theme_color": "#E23744",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://customer-assets.emergentagent.com/job_task-tracker-735/artifacts/kinqp8ij_Zomoto_Logo-1.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://customer-assets.emergentagent.com/job_task-tracker-735/artifacts/kinqp8ij_Zomoto_Logo-1.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity"],
+  "lang": "en",
+  "dir": "ltr"
+}
