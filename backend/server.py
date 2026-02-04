@@ -731,14 +731,47 @@ async def update_task(task_id: str, task_data: TaskUpdate, current_user: dict = 
         update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
         await db.tasks.update_one({"id": task_id}, {"$set": update_data})
         
-        # Log activity
+        # Log activity and send notifications
         if "status" in update_data:
             await log_activity(task_id, current_user["id"], current_user["name"], "STATUS_CHANGED", f"Status changed to {update_data['status']}")
+            
+            # Notify relevant users about status changes
+            if update_data["status"] == TaskStatus.COMPLETED and task.get("created_by"):
+                await create_notification(
+                    user_id=task["created_by"],
+                    notification_type="TASK_COMPLETED",
+                    title="Task Completed",
+                    message=f"Task '{task['title']}' has been completed",
+                    task_id=task_id
+                )
+        
         if "assigned_to" in update_data:
             await log_activity(task_id, current_user["id"], current_user["name"], "REASSIGNED", f"Task reassigned to {update_data.get('assigned_to_name', 'Unknown')}")
+            # Notify newly assigned staff
+            await create_notification(
+                user_id=update_data["assigned_to"],
+                notification_type="TASK_ASSIGNED",
+                title="Task Assigned",
+                message=f"You have been assigned: {task['title']}",
+                task_id=task_id
+            )
     
     updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     return TaskResponse(**updated_task)
+
+@api_router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str, current_user: dict = Depends(require_roles([UserRole.OWNER, UserRole.MANAGER]))):
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Delete task and related data
+    await db.tasks.delete_one({"id": task_id})
+    await db.task_comments.delete_many({"task_id": task_id})
+    await db.task_attachments.delete_many({"task_id": task_id})
+    await db.task_activity_logs.delete_many({"task_id": task_id})
+    
+    return {"message": "Task deleted successfully"}
 
 @api_router.post("/tasks/{task_id}/verify", response_model=TaskResponse)
 async def verify_task(task_id: str, current_user: dict = Depends(require_roles([UserRole.OWNER, UserRole.MANAGER]))):
