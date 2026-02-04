@@ -185,6 +185,45 @@ class DashboardStats(BaseModel):
     tasks_to_verify: Optional[int] = None
     total_staff: Optional[int] = None
 
+# Category Models
+class CategoryCreate(BaseModel):
+    name: str
+    color: Optional[str] = "#6B7280"
+
+class CategoryResponse(BaseModel):
+    id: str
+    name: str
+    color: str
+    is_active: bool
+    created_at: str
+
+# Notification Models
+class NotificationResponse(BaseModel):
+    id: str
+    user_id: str
+    type: str
+    title: str
+    message: str
+    task_id: Optional[str] = None
+    is_read: bool
+    created_at: str
+
+# Attachment Response with URL
+class AttachmentResponse(BaseModel):
+    id: str
+    task_id: str
+    filename: str
+    content_type: str
+    uploaded_by_name: str
+    created_at: str
+    url: str
+    in_progress: int
+    completed: int
+    verified: int
+    tasks_to_assign: Optional[int] = None
+    tasks_to_verify: Optional[int] = None
+    total_staff: Optional[int] = None
+
 # ============== AUTH HELPERS ==============
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
