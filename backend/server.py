@@ -500,6 +500,112 @@ async def delete_task_template(template_id: str, current_user: dict = Depends(re
     await db.task_templates.update_one({"id": template_id}, {"$set": {"is_active": False}})
     return {"message": "Task template deleted"}
 
+# ============== CATEGORY ROUTES ==============
+
+@api_router.post("/categories", response_model=CategoryResponse)
+async def create_category(category_data: CategoryCreate, current_user: dict = Depends(require_roles([UserRole.OWNER, UserRole.MANAGER]))):
+    # Check if category already exists
+    existing = await db.categories.find_one({"name": {"$regex": f"^{category_data.name}$", "$options": "i"}, "is_active": True})
+    if existing:
+        raise HTTPException(status_code=400, detail="Category already exists")
+    
+    category = {
+        "id": str(uuid.uuid4()),
+        "name": category_data.name,
+        "color": category_data.color or "#6B7280",
+        "is_active": True,
+        "created_by": current_user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.categories.insert_one(category)
+    
+    return CategoryResponse(
+        id=category["id"],
+        name=category["name"],
+        color=category["color"],
+        is_active=category["is_active"],
+        created_at=category["created_at"]
+    )
+
+@api_router.get("/categories", response_model=List[CategoryResponse])
+async def get_categories(current_user: dict = Depends(get_current_user)):
+    categories = await db.categories.find({"is_active": True}, {"_id": 0}).to_list(100)
+    
+    # Return default categories if none exist
+    if not categories:
+        default_categories = [
+            {"id": "cat-kitchen", "name": "Kitchen", "color": "#EF4444", "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": "cat-cleaning", "name": "Cleaning", "color": "#10B981", "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": "cat-maintenance", "name": "Maintenance", "color": "#F59E0B", "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()},
+            {"id": "cat-other", "name": "Other", "color": "#6B7280", "is_active": True, "created_at": datetime.now(timezone.utc).isoformat()},
+        ]
+        await db.categories.insert_many(default_categories)
+        categories = default_categories
+    
+    return [CategoryResponse(**{k: v for k, v in c.items() if k != "_id"}) for c in categories]
+
+@api_router.put("/categories/{category_id}", response_model=CategoryResponse)
+async def update_category(category_id: str, category_data: CategoryCreate, current_user: dict = Depends(require_roles([UserRole.OWNER, UserRole.MANAGER]))):
+    category = await db.categories.find_one({"id": category_id}, {"_id": 0})
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    
+    update_data = {"name": category_data.name}
+    if category_data.color:
+        update_data["color"] = category_data.color
+    
+    await db.categories.update_one({"id": category_id}, {"$set": update_data})
+    
+    updated = await db.categories.find_one({"id": category_id}, {"_id": 0})
+    return CategoryResponse(**updated)
+
+@api_router.delete("/categories/{category_id}")
+async def delete_category(category_id: str, current_user: dict = Depends(require_roles([UserRole.OWNER, UserRole.MANAGER]))):
+    # Check if category is in use
+    tasks_using = await db.tasks.count_documents({"category": category_id})
+    if tasks_using > 0:
+        raise HTTPException(status_code=400, detail=f"Cannot delete category - {tasks_using} tasks are using it")
+    
+    await db.categories.update_one({"id": category_id}, {"$set": {"is_active": False}})
+    return {"message": "Category deleted"}
+
+# ============== NOTIFICATION ROUTES ==============
+
+@api_router.get("/notifications", response_model=List[NotificationResponse])
+async def get_notifications(
+    unread_only: bool = False,
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    query = {"user_id": current_user["id"]}
+    if unread_only:
+        query["is_read"] = False
+    
+    notifications = await db.notifications.find(query, {"_id": 0}).sort("created_at", -1).limit(limit).to_list(limit)
+    return [NotificationResponse(**n) for n in notifications]
+
+@api_router.get("/notifications/unread-count")
+async def get_unread_count(current_user: dict = Depends(get_current_user)):
+    count = await db.notifications.count_documents({"user_id": current_user["id"], "is_read": False})
+    return {"count": count}
+
+@api_router.put("/notifications/{notification_id}/read")
+async def mark_notification_read(notification_id: str, current_user: dict = Depends(get_current_user)):
+    await db.notifications.update_one(
+        {"id": notification_id, "user_id": current_user["id"]},
+        {"$set": {"is_read": True}}
+    )
+    return {"message": "Notification marked as read"}
+
+@api_router.put("/notifications/read-all")
+async def mark_all_notifications_read(current_user: dict = Depends(get_current_user)):
+    await db.notifications.update_many(
+        {"user_id": current_user["id"], "is_read": False},
+        {"$set": {"is_read": True}}
+    )
+    return {"message": "All notifications marked as read"}
+
 # ============== TASK ROUTES ==============
 
 @api_router.post("/tasks", response_model=TaskResponse)
