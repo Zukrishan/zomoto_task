@@ -348,6 +348,178 @@ class ZomotoTasksAPITester:
         )
         return success
 
+    # NEW FEATURES TESTING
+
+    def test_get_categories(self, role):
+        """Test get categories"""
+        success, response = self.run_test(
+            f"Get Categories ({role})",
+            "GET",
+            "categories",
+            200,
+            token=self.tokens[role]
+        )
+        return success
+
+    def test_create_category(self, role):
+        """Test create category (Owner/Manager only)"""
+        expected_status = 200 if role in ['OWNER', 'MANAGER'] else 403
+        category_data = {
+            "name": f"Test Category {datetime.now().strftime('%H%M%S')}",
+            "color": "#FF5733"
+        }
+        success, response = self.run_test(
+            f"Create Category ({role})",
+            "POST",
+            "categories",
+            expected_status,
+            data=category_data,
+            token=self.tokens[role]
+        )
+        if success and role in ['OWNER', 'MANAGER']:
+            self.tasks['TEST_CATEGORY'] = response
+        return success
+
+    def test_update_category(self, role):
+        """Test update category (Owner/Manager only)"""
+        if 'TEST_CATEGORY' not in self.tasks:
+            print(f"⚠️  Skipping Update Category ({role}) - No test category available")
+            return True
+            
+        expected_status = 200 if role in ['OWNER', 'MANAGER'] else 403
+        category_id = self.tasks['TEST_CATEGORY']['id']
+        update_data = {
+            "name": f"Updated Category {datetime.now().strftime('%H%M%S')}",
+            "color": "#33FF57"
+        }
+        success, response = self.run_test(
+            f"Update Category ({role})",
+            "PUT",
+            f"categories/{category_id}",
+            expected_status,
+            data=update_data,
+            token=self.tokens[role]
+        )
+        return success
+
+    def test_delete_category(self, role):
+        """Test delete category (Owner/Manager only)"""
+        if 'TEST_CATEGORY' not in self.tasks:
+            print(f"⚠️  Skipping Delete Category ({role}) - No test category available")
+            return True
+            
+        expected_status = 200 if role in ['OWNER', 'MANAGER'] else 403
+        category_id = self.tasks['TEST_CATEGORY']['id']
+        success, response = self.run_test(
+            f"Delete Category ({role})",
+            "DELETE",
+            f"categories/{category_id}",
+            expected_status,
+            token=self.tokens[role]
+        )
+        return success
+
+    def test_get_notifications(self, role):
+        """Test get notifications"""
+        success, response = self.run_test(
+            f"Get Notifications ({role})",
+            "GET",
+            "notifications",
+            200,
+            token=self.tokens[role]
+        )
+        return success
+
+    def test_get_unread_count(self, role):
+        """Test get unread notifications count"""
+        success, response = self.run_test(
+            f"Get Unread Count ({role})",
+            "GET",
+            "notifications/unread-count",
+            200,
+            token=self.tokens[role]
+        )
+        return success
+
+    def test_mark_notification_read(self, role):
+        """Test mark notification as read"""
+        # First get notifications to find one to mark as read
+        success, notifications = self.run_test(
+            f"Get Notifications for Read Test ({role})",
+            "GET",
+            "notifications",
+            200,
+            token=self.tokens[role]
+        )
+        
+        if not success or not notifications:
+            print(f"⚠️  Skipping Mark Notification Read ({role}) - No notifications available")
+            return True
+            
+        # Find an unread notification
+        unread_notification = None
+        for notif in notifications:
+            if not notif.get('is_read', True):
+                unread_notification = notif
+                break
+                
+        if not unread_notification:
+            print(f"⚠️  Skipping Mark Notification Read ({role}) - No unread notifications")
+            return True
+            
+        success, response = self.run_test(
+            f"Mark Notification Read ({role})",
+            "PUT",
+            f"notifications/{unread_notification['id']}/read",
+            200,
+            token=self.tokens[role]
+        )
+        return success
+
+    def test_mark_all_notifications_read(self, role):
+        """Test mark all notifications as read"""
+        success, response = self.run_test(
+            f"Mark All Notifications Read ({role})",
+            "PUT",
+            "notifications/read-all",
+            200,
+            token=self.tokens[role]
+        )
+        return success
+
+    def test_delete_task(self, role):
+        """Test delete task (Owner/Manager only)"""
+        if 'TEST_TASK' not in self.tasks:
+            print(f"⚠️  Skipping Delete Task ({role}) - No test task available")
+            return True
+            
+        expected_status = 200 if role in ['OWNER', 'MANAGER'] else 403
+        task_id = self.tasks['TEST_TASK']['id']
+        success, response = self.run_test(
+            f"Delete Task ({role})",
+            "DELETE",
+            f"tasks/{task_id}",
+            expected_status,
+            token=self.tokens[role]
+        )
+        return success
+
+    def test_get_attachments(self, role):
+        """Test get task attachments"""
+        if 'TEST_TASK' not in self.tasks:
+            print(f"⚠️  Skipping Get Attachments ({role}) - No test task available")
+            return True
+            
+        task_id = self.tasks['TEST_TASK']['id']
+        success, response = self.run_test(
+            f"Get Attachments ({role})",
+            "GET",
+            f"tasks/{task_id}/attachments",
+            200,
+            token=self.tokens[role]
+        )
+        return success
+
 def main():
     print("🚀 Starting Zomoto Tasks API Testing...")
     tester = ZomotoTasksAPITester()
