@@ -523,6 +523,29 @@ export default function TaskDetailPage() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* Edit Task Modal */}
+      {showEditModal && (
+        <EditTaskModal
+          open={showEditModal}
+          onClose={() => setShowEditModal(false)}
+          onSuccess={() => {
+            setShowEditModal(false);
+            fetchTaskData();
+          }}
+          task={task}
+        />
+      )}
+
+      {/* Image Viewer */}
+      {viewerImage && (
+        <ImageViewer
+          open={!!viewerImage}
+          onClose={() => setViewerImage(null)}
+          imageUrl={viewerImage.url}
+          filename={viewerImage.filename}
+        />
+      )}
     </Layout>
   );
 }
