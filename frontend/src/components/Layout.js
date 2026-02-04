@@ -110,9 +110,10 @@ export default function Layout({ children }) {
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="rounded-full"
             data-testid="mobile-menu-btn"
-        >
-          {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </Button>
+          >
+            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+          </Button>
+        </div>
       </header>
 
       {/* Mobile Sidebar Overlay */}
