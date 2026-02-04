@@ -55,12 +55,13 @@ export default function Layout({ children }) {
       {/* Desktop Sidebar */}
       <aside className="hidden md:flex md:flex-col md:w-64 md:fixed md:inset-y-0 bg-white border-r border-zinc-200 z-30">
         {/* Logo */}
-        <div className="p-6 border-b border-zinc-100">
+        <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
           <img 
             src="https://customer-assets.emergentagent.com/job_task-tracker-735/artifacts/kinqp8ij_Zomoto_Logo-1.png"
             alt="Zomoto Logo"
             className="h-12 w-auto"
           />
+          <NotificationBell />
         </div>
 
         {/* Navigation */}
