@@ -6,11 +6,13 @@ import {
   BookOpen, 
   LogOut,
   Menu,
-  X
+  X,
+  Tags
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { Button } from './ui/button';
+import NotificationBell from './NotificationBell';
 
 export default function Layout({ children }) {
   const navigate = useNavigate();
@@ -27,6 +29,7 @@ export default function Layout({ children }) {
     { to: '/tasks', icon: ClipboardList, label: 'Tasks', show: true },
     { to: '/users', icon: Users, label: 'Team', show: isOwner },
     { to: '/task-library', icon: BookOpen, label: 'Library', show: isOwner || isManager },
+    { to: '/categories', icon: Tags, label: 'Categories', show: isOwner || isManager },
   ];
 
   const NavItem = ({ to, icon: Icon, label }) => (
