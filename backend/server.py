@@ -15,6 +15,7 @@ from jose import JWTError, jwt
 import httpx
 import base64
 import aiofiles
+from fastapi.responses import FileResponse
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
