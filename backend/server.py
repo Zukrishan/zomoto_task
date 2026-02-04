@@ -642,6 +642,14 @@ async def create_task(task_data: TaskCreate, current_user: dict = Depends(requir
     
     if task_data.assigned_to:
         await log_activity(task["id"], current_user["id"], current_user["name"], "ASSIGNED", f"Task assigned to {assigned_to_name}")
+        # Send notification to assigned staff
+        await create_notification(
+            user_id=task_data.assigned_to,
+            notification_type="TASK_ASSIGNED",
+            title="New Task Assigned",
+            message=f"You have been assigned: {task['title']}",
+            task_id=task["id"]
+        )
     
     return TaskResponse(**{k: v for k, v in task.items() if k != "_id"})
 
