@@ -789,6 +789,16 @@ async def verify_task(task_id: str, current_user: dict = Depends(require_roles([
     
     await log_activity(task_id, current_user["id"], current_user["name"], "VERIFIED", "Task verified")
     
+    # Notify the staff who completed the task
+    if task.get("assigned_to"):
+        await create_notification(
+            user_id=task["assigned_to"],
+            notification_type="TASK_VERIFIED",
+            title="Task Verified",
+            message=f"Your task '{task['title']}' has been verified",
+            task_id=task_id
+        )
+    
     updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     return TaskResponse(**updated_task)
 
