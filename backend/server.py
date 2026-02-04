@@ -534,18 +534,16 @@ async def update_task(task_id: str, task_data: TaskUpdate, current_user: dict = 
             raise HTTPException(status_code=403, detail="Access denied")
         
         # Staff can only change status: ASSIGNED -> IN_PROGRESS -> COMPLETED
+        update_data = {}
         if task_data.status:
             valid_transitions = {
                 TaskStatus.ASSIGNED: [TaskStatus.IN_PROGRESS],
                 TaskStatus.IN_PROGRESS: [TaskStatus.COMPLETED]
             }
             current_status = task["status"]
-            if current_status not in valid_transitions or task_data.status not in valid_transitions.get(current_status, []):
-                raise HTTPException(status_code=400, detail="Invalid status transition")
-        
-        # Staff can't update other fields
-        update_data = {}
-        if task_data.status:
+            allowed = valid_transitions.get(current_status, [])
+            if task_data.status not in allowed:
+                raise HTTPException(status_code=400, detail=f"Invalid status transition from {current_status} to {task_data.status}")
             update_data["status"] = task_data.status
     else:
         # Owner/Manager can update everything
