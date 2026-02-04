@@ -209,6 +209,8 @@ export default function TaskDetailPage() {
   const canCompleteTask = isStaff && task.status === 'IN_PROGRESS';
   const canVerify = (isOwner || isManager) && task.status === 'COMPLETED';
   const canReassign = (isOwner || isManager) && !['VERIFIED'].includes(task.status);
+  const canEdit = (isOwner || isManager) && !['VERIFIED'].includes(task.status);
+  const canDelete = (isOwner || isManager);
 
   return (
     <Layout>
@@ -229,6 +231,30 @@ export default function TaskDetailPage() {
               {task.title}
             </h1>
           </div>
+          {/* Edit/Delete Dropdown */}
+          {(canEdit || canDelete) && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full" data-testid="task-menu-btn">
+                  <MoreVertical className="h-5 w-5" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {canEdit && (
+                  <DropdownMenuItem onClick={() => setShowEditModal(true)} data-testid="edit-task-btn">
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit Task
+                  </DropdownMenuItem>
+                )}
+                {canDelete && (
+                  <DropdownMenuItem onClick={handleDeleteTask} className="text-red-600" data-testid="delete-task-btn">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete Task
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
 
         {/* Status & Priority Badges */}
