@@ -1,17 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Loader2, Plus, Calendar as CalendarIcon } from 'lucide-react';
+import { Loader2, Plus, Calendar as CalendarIcon, X } from 'lucide-react';
 import { format } from 'date-fns';
 import api from '../lib/api';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -23,14 +17,6 @@ import {
   SelectTrigger,
   SelectValue 
 } from './ui/select';
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from './ui/command';
 import {
   Popover,
   PopoverContent,
@@ -53,13 +39,15 @@ const PRIORITY_OPTIONS = [
 ];
 
 export default function CreateTaskModal({ open, onClose, onSuccess }) {
+  const modalRef = useRef(null);
   const [templates, setTemplates] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState('');
-  const [templateSearch, setTemplateSearch] = useState('');
   const [showTemplateList, setShowTemplateList] = useState(false);
+  const [category, setCategory] = useState('Other');
+  const [priority, setPriority] = useState('MEDIUM');
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
     resolver: zodResolver(taskSchema),
@@ -77,14 +65,14 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     if (open) {
       fetchTemplates();
       fetchStaff();
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
     }
+    return () => {
+      document.body.style.overflow = '';
+    };
   }, [open]);
-
-  useEffect(() => {
-    if (templateSearch) {
-      fetchTemplates(templateSearch);
-    }
-  }, [templateSearch]);
 
   const fetchTemplates = async (search = '') => {
     try {
@@ -108,18 +96,20 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     setValue('title', template.name);
     if (template.default_category) {
       setValue('category', template.default_category);
+      setCategory(template.default_category);
     }
     if (template.default_priority) {
       setValue('priority', template.default_priority);
+      setPriority(template.default_priority);
     }
     setShowTemplateList(false);
   };
 
   const handleAddNewTemplate = async () => {
-    if (!titleValue.trim()) return;
+    if (!titleValue?.trim()) return;
     
     try {
-      const response = await api.post('/task-templates', { name: titleValue });
+      await api.post('/task-templates', { name: titleValue });
       toast.success('Task added to library');
       fetchTemplates();
     } catch (error) {
@@ -132,16 +122,17 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     setLoading(true);
     try {
       const taskData = {
-        ...data,
+        title: data.title,
+        description: data.description || '',
+        category: category,
+        priority: priority,
         due_date: selectedDate ? selectedDate.toISOString() : null,
         assigned_to: selectedStaff || null,
       };
       
       await api.post('/tasks', taskData);
       toast.success('Task created successfully');
-      reset();
-      setSelectedDate(null);
-      setSelectedStaff('');
+      handleClose();
       onSuccess();
     } catch (error) {
       toast.error(error.response?.data?.detail || 'Failed to create task');
@@ -154,6 +145,9 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     reset();
     setSelectedDate(null);
     setSelectedStaff('');
+    setCategory('Other');
+    setPriority('MEDIUM');
+    setShowTemplateList(false);
     onClose();
   };
 
@@ -164,14 +158,37 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
   const showAddToLibrary = titleValue && 
     !templates.some(t => t.name.toLowerCase() === titleValue.toLowerCase());
 
+  if (!open) return null;
+
   return (
-    <Dialog open={open} onOpenChange={handleClose} modal={true}>
-      <DialogContent className="sm:max-w-md rounded-2xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
-        <DialogHeader>
-          <DialogTitle>Create New Task</DialogTitle>
-        </DialogHeader>
-        
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center" data-testid="create-task-modal">
+      {/* Backdrop */}
+      <div 
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm" 
+        onClick={handleClose}
+        data-testid="modal-backdrop"
+      />
+      
+      {/* Modal Content */}
+      <div 
+        ref={modalRef}
+        className="relative z-50 w-full max-w-md mx-4 bg-white rounded-2xl shadow-xl max-h-[90vh] overflow-y-auto animate-slide-up"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="sticky top-0 bg-white px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-zinc-900">Create New Task</h2>
+          <button 
+            onClick={handleClose}
+            className="p-2 hover:bg-zinc-100 rounded-full transition-colors"
+            data-testid="close-modal-btn"
+          >
+            <X className="h-5 w-5 text-zinc-500" />
+          </button>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
           {/* Task Title with Autocomplete */}
           <div className="space-y-2">
             <Label htmlFor="title">Task Name</Label>
@@ -187,7 +204,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
               />
               
               {showTemplateList && titleValue && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg z-50 max-h-48 overflow-y-auto">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-zinc-200 rounded-xl shadow-lg z-[60] max-h-48 overflow-y-auto">
                   {filteredTemplates.map(template => (
                     <div
                       key={template.id}
@@ -239,8 +256,11 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
             <div className="space-y-2">
               <Label>Category</Label>
               <Select 
-                defaultValue="Other"
-                onValueChange={(v) => setValue('category', v)}
+                value={category}
+                onValueChange={(v) => {
+                  setCategory(v);
+                  setValue('category', v);
+                }}
               >
                 <SelectTrigger className="rounded-xl" data-testid="task-category-select">
                   <SelectValue />
@@ -255,8 +275,11 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
             <div className="space-y-2">
               <Label>Priority</Label>
               <Select 
-                defaultValue="MEDIUM"
-                onValueChange={(v) => setValue('priority', v)}
+                value={priority}
+                onValueChange={(v) => {
+                  setPriority(v);
+                  setValue('priority', v);
+                }}
               >
                 <SelectTrigger className="rounded-xl" data-testid="task-priority-select">
                   <SelectValue />
@@ -276,6 +299,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
             <Popover>
               <PopoverTrigger asChild>
                 <Button
+                  type="button"
                   variant="outline"
                   className="w-full justify-start text-left font-normal rounded-xl h-12"
                   data-testid="task-due-date-btn"
@@ -326,7 +350,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
             )}
           </Button>
         </form>
-      </DialogContent>
-    </Dialog>
+      </div>
+    </div>
   );
 }
