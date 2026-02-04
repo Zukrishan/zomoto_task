@@ -887,7 +887,31 @@ async def upload_attachment(
 @api_router.get("/tasks/{task_id}/attachments")
 async def get_attachments(task_id: str, current_user: dict = Depends(get_current_user)):
     attachments = await db.task_attachments.find({"task_id": task_id}, {"_id": 0}).to_list(100)
-    return [{"id": a["id"], "filename": a["filename"], "uploaded_by_name": a["uploaded_by_name"], "created_at": a["created_at"]} for a in attachments]
+    return [{
+        "id": a["id"], 
+        "task_id": a["task_id"],
+        "filename": a["filename"],
+        "content_type": a.get("content_type", "application/octet-stream"),
+        "uploaded_by_name": a["uploaded_by_name"], 
+        "created_at": a["created_at"],
+        "url": f"/api/attachments/{a['id']}"
+    } for a in attachments]
+
+@api_router.get("/attachments/{attachment_id}")
+async def get_attachment_file(attachment_id: str):
+    attachment = await db.task_attachments.find_one({"id": attachment_id}, {"_id": 0})
+    if not attachment:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+    
+    file_path = Path(attachment["file_path"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(
+        path=file_path,
+        filename=attachment["filename"],
+        media_type=attachment.get("content_type", "application/octet-stream")
+    )
 
 # ============== DASHBOARD ROUTES ==============
 
