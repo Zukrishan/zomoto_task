@@ -165,8 +165,8 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     !templates.some(t => t.name.toLowerCase() === titleValue.toLowerCase());
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-md rounded-2xl max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleClose} modal={true}>
+      <DialogContent className="sm:max-w-md rounded-2xl max-h-[90vh] overflow-y-auto" onPointerDownOutside={(e) => e.preventDefault()} onInteractOutside={(e) => e.preventDefault()}>
         <DialogHeader>
           <DialogTitle>Create New Task</DialogTitle>
         </DialogHeader>
