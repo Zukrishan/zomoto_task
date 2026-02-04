@@ -381,32 +381,71 @@ export default function TaskDetailPage() {
             <label className="cursor-pointer">
               <div className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-zinc-200 rounded-xl hover:border-[#E23744] transition-colors">
                 <Upload className="h-5 w-5 text-zinc-400" />
-                <span className="text-zinc-500">Upload file</span>
+                <span className="text-zinc-500">Upload proof / files</span>
               </div>
               <input 
                 type="file" 
                 className="hidden" 
                 onChange={handleFileUpload}
+                accept="image/*,.pdf,.doc,.docx"
                 data-testid="file-upload-input"
               />
             </label>
 
             {/* Attachments List */}
             <div className="space-y-2" data-testid="attachments-list">
-              {attachments.length > 0 ? attachments.map(attachment => (
-                <Card key={attachment.id} className="bg-zinc-50 rounded-xl border-0">
-                  <CardContent className="p-4 flex items-center gap-3">
-                    <Paperclip className="h-5 w-5 text-zinc-400" />
-                    <div className="flex-1">
-                      <p className="font-medium text-zinc-900 text-sm">{attachment.filename}</p>
-                      <p className="text-xs text-zinc-400">
-                        Uploaded by {attachment.uploaded_by_name}
-                      </p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )) : (
-                <p className="text-center text-zinc-400 py-8">No attachments</p>
+              {attachments.length > 0 ? attachments.map(attachment => {
+                const isImage = attachment.content_type?.startsWith('image/');
+                const backendUrl = process.env.REACT_APP_BACKEND_URL;
+                const fileUrl = `${backendUrl}${attachment.url}`;
+                
+                return (
+                  <Card key={attachment.id} className="bg-zinc-50 rounded-xl border-0 overflow-hidden">
+                    {/* Preview for images */}
+                    {isImage && (
+                      <div className="relative">
+                        <img 
+                          src={fileUrl}
+                          alt={attachment.filename}
+                          className="w-full h-48 object-cover cursor-pointer"
+                          onClick={() => window.open(fileUrl, '_blank')}
+                          data-testid={`attachment-preview-${attachment.id}`}
+                        />
+                        <div className="absolute top-2 right-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => window.open(fileUrl, '_blank')}
+                            className="bg-white/90 hover:bg-white"
+                          >
+                            View Full
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                    <CardContent className="p-4 flex items-center gap-3">
+                      <Paperclip className="h-5 w-5 text-zinc-400 flex-shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-zinc-900 text-sm truncate">{attachment.filename}</p>
+                        <p className="text-xs text-zinc-400">
+                          Uploaded by {attachment.uploaded_by_name} • {format(new Date(attachment.created_at), 'MMM d, h:mm a')}
+                        </p>
+                      </div>
+                      <a
+                        href={fileUrl}
+                        download={attachment.filename}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-[#E23744] hover:underline font-medium"
+                        data-testid={`download-${attachment.id}`}
+                      >
+                        Download
+                      </a>
+                    </CardContent>
+                  </Card>
+                );
+              }) : (
+                <p className="text-center text-zinc-400 py-8">No attachments yet. Upload proof of task completion.</p>
               )}
             </div>
           </TabsContent>
