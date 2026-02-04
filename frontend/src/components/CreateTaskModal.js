@@ -182,6 +182,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
                 className="rounded-xl"
                 {...register('title')}
                 onFocus={() => setShowTemplateList(true)}
+                onBlur={() => setTimeout(() => setShowTemplateList(false), 200)}
                 data-testid="task-title-input"
               />
               
