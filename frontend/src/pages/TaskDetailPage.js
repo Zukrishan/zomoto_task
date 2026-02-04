@@ -149,6 +149,17 @@ export default function TaskDetailPage() {
     }
   };
 
+  const handleDeleteTask = async () => {
+    if (!window.confirm('Are you sure you want to delete this task? This action cannot be undone.')) return;
+    try {
+      await api.delete(`/tasks/${taskId}`);
+      toast.success('Task deleted');
+      navigate('/tasks');
+    } catch (error) {
+      toast.error('Failed to delete task');
+    }
+  };
+
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
     setSubmitting(true);
