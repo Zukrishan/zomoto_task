@@ -448,6 +448,7 @@ export default function TaskDetailPage() {
                 const isImage = attachment.content_type?.startsWith('image/');
                 const backendUrl = process.env.REACT_APP_BACKEND_URL;
                 const fileUrl = `${backendUrl}${attachment.url}`;
+                const thumbUrl = attachment.thumbnail_url ? `${backendUrl}${attachment.thumbnail_url}` : fileUrl;
                 
                 return (
                   <Card key={attachment.id} className="bg-zinc-50 rounded-xl border-0 overflow-hidden">
@@ -455,17 +456,17 @@ export default function TaskDetailPage() {
                     {isImage && (
                       <div className="relative">
                         <img 
-                          src={fileUrl}
+                          src={thumbUrl}
                           alt={attachment.filename}
-                          className="w-full h-48 object-cover cursor-pointer"
-                          onClick={() => window.open(fileUrl, '_blank')}
+                          className="w-full h-48 object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => setViewerImage({ url: fileUrl, filename: attachment.filename })}
                           data-testid={`attachment-preview-${attachment.id}`}
                         />
                         <div className="absolute top-2 right-2">
                           <Button
                             size="sm"
                             variant="secondary"
-                            onClick={() => window.open(fileUrl, '_blank')}
+                            onClick={() => setViewerImage({ url: fileUrl, filename: attachment.filename })}
                             className="bg-white/90 hover:bg-white"
                           >
                             View Full
