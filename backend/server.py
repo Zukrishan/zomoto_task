@@ -275,6 +275,22 @@ async def log_activity(task_id: str, user_id: str, user_name: str, action: str, 
     }
     await db.task_activity_logs.insert_one(log_entry)
 
+# ============== NOTIFICATION HELPER ==============
+
+async def create_notification(user_id: str, notification_type: str, title: str, message: str, task_id: str = None):
+    notification = {
+        "id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "type": notification_type,
+        "title": title,
+        "message": message,
+        "task_id": task_id,
+        "is_read": False,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.notifications.insert_one(notification)
+    return notification
+
 # ============== AUTH ROUTES ==============
 
 @api_router.post("/auth/login", response_model=TokenResponse)
