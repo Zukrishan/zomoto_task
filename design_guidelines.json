@@ -1,0 +1,101 @@
+{
+  "brand_identity": {
+    "name": "Zomoto Tasks",
+    "logo_url": "https://customer-assets.emergentagent.com/job_task-tracker-735/artifacts/kinqp8ij_Zomoto_Logo-1.png",
+    "primary_color": "#E23744",
+    "font_family": "DM Sans, sans-serif",
+    "theme_mode": "light",
+    "emotional_tone": "Efficient, Warm, Professional, High-Energy"
+  },
+  "typography": {
+    "font_family": "DM Sans, sans-serif",
+    "headings": {
+      "h1": "text-3xl font-bold tracking-tight text-zinc-900",
+      "h2": "text-2xl font-semibold tracking-tight text-zinc-900",
+      "h3": "text-xl font-semibold tracking-tight text-zinc-900"
+    },
+    "body": {
+      "base": "text-base font-normal text-zinc-600 leading-relaxed",
+      "small": "text-sm font-medium text-zinc-500"
+    }
+  },
+  "colors": {
+    "primary": {
+      "DEFAULT": "#E23744",
+      "foreground": "#FFFFFF",
+      "hover": "#C42B37",
+      "active": "#A6222C"
+    },
+    "secondary": {
+      "DEFAULT": "#F4F4F5",
+      "foreground": "#18181B"
+    },
+    "background": "#F4F4F5",
+    "surface": "#FFFFFF",
+    "text": {
+      "primary": "#18181B",
+      "secondary": "#71717A",
+      "muted": "#A1A1AA"
+    },
+    "status": {
+      "success": "#22C55E",
+      "warning": "#F59E0B",
+      "error": "#EF4444",
+      "info": "#3B82F6"
+    }
+  },
+  "layout_strategies": {
+    "mobile_first": true,
+    "container": "max-w-md mx-auto md:max-w-5xl md:mx-auto px-4 md:px-8",
+    "spacing": {
+      "section_gap": "gap-6",
+      "card_padding": "p-5"
+    },
+    "navigation": {
+      "mobile": "Bottom Tab Bar (Fixed)",
+      "desktop": "Sidebar Navigation (Left)"
+    }
+  },
+  "component_styles": {
+    "buttons": {
+      "primary": "bg-[#E23744] hover:bg-[#C42B37] text-white rounded-full font-medium h-12 px-6 shadow-md active:scale-95 transition-transform",
+      "secondary": "bg-white border border-zinc-200 text-zinc-900 hover:bg-zinc-50 rounded-full font-medium h-12 px-6",
+      "ghost": "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 rounded-lg h-10 px-4"
+    },
+    "cards": {
+      "base": "bg-white rounded-2xl border border-zinc-100 shadow-sm p-5",
+      "interactive": "bg-white rounded-2xl border border-zinc-100 shadow-sm p-5 hover:shadow-md transition-shadow cursor-pointer"
+    },
+    "inputs": {
+      "base": "h-12 rounded-xl border-zinc-200 focus:ring-[#E23744] focus:border-[#E23744] bg-zinc-50/50"
+    }
+  },
+  "visual_assets": {
+    "images": {
+      "login_hero": "https://images.unsplash.com/photo-1761095596618-081ea3f043a5?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "kitchen_staff": "https://images.unsplash.com/photo-1766415605422-06d022bd22bf?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "waiter_cleaning": "https://images.unsplash.com/photo-1769163658180-c44f17c693e6?crop=entropy&cs=srgb&fm=jpg&q=85",
+      "manager_tablet": "https://images.unsplash.com/photo-1693571109313-701c1929290f?crop=entropy&cs=srgb&fm=jpg&q=85"
+    },
+    "icons": {
+      "library": "lucide-react",
+      "style": "Rounded, 24px default size"
+    }
+  },
+  "accessibility_rules": {
+    "touch_targets": "Minimum 44x44px for all interactive elements",
+    "contrast": "Ensure text on red background is pure white. Text on gray background must be zinc-600 or darker.",
+    "focus_states": "Visible ring-2 ring-offset-2 ring-[#E23744]"
+  },
+  "universal_guidelines": [
+    "Use 'sonner' for all toast notifications.",
+    "Do not use 'Inter' font. Use 'DM Sans' exclusively.",
+    "Avoid gradients. Use solid, high-contrast colors.",
+    "Mobile navigation must be at the bottom for Staff role.",
+    "Owner dashboard should use a dense grid layout (Bento grid).",
+    "All interactive elements must have 'data-testid' attributes.",
+    "Use 'lucide-react' for icons.",
+    "Forms must use 'react-hook-form' with 'zod' validation."
+  ],
+  "instructions_to_main_agent": "You are building Zomoto Tasks. Focus on the mobile experience first. The app should feel snappy and native-like. Use the provided image URLs for the login screen and empty states. Strictly follow the Red (#E23744) and White theme. Do not deviate from the DM Sans font requirement."
+}
