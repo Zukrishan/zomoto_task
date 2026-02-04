@@ -14,7 +14,10 @@ import {
   Play,
   ShieldCheck,
   Loader2,
-  Upload
+  Upload,
+  Pencil,
+  Trash2,
+  MoreVertical
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
@@ -32,6 +35,14 @@ import {
   SelectTrigger,
   SelectValue 
 } from '../components/ui/select';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
+import EditTaskModal from '../components/EditTaskModal';
+import ImageViewer from '../components/ImageViewer';
 
 const STATUS_CONFIG = {
   CREATED: { label: 'Created', color: 'bg-zinc-100 text-zinc-700' },
@@ -58,6 +69,8 @@ export default function TaskDetailPage() {
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newComment, setNewComment] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [viewerImage, setViewerImage] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [updating, setUpdating] = useState(false);
 
