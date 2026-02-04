@@ -607,6 +607,41 @@ def main():
         tester.test_get_comments(role)
         tester.test_get_activity_log(role)
     
+    # NEW FEATURES TESTING
+    print("\n" + "="*50)
+    print("CATEGORIES CRUD TESTS")
+    print("="*50)
+    
+    for role in credentials.keys():
+        tester.test_get_categories(role)
+        tester.test_create_category(role)
+        tester.test_update_category(role)
+        tester.test_delete_category(role)
+    
+    print("\n" + "="*50)
+    print("NOTIFICATIONS TESTS")
+    print("="*50)
+    
+    for role in credentials.keys():
+        tester.test_get_notifications(role)
+        tester.test_get_unread_count(role)
+        tester.test_mark_notification_read(role)
+        tester.test_mark_all_notifications_read(role)
+    
+    print("\n" + "="*50)
+    print("ATTACHMENTS TESTS")
+    print("="*50)
+    
+    for role in credentials.keys():
+        tester.test_get_attachments(role)
+    
+    print("\n" + "="*50)
+    print("TASK DELETE TESTS")
+    print("="*50)
+    
+    for role in credentials.keys():
+        tester.test_delete_task(role)
+    
     # Print final results
     print("\n" + "="*50)
     print("TEST RESULTS")
