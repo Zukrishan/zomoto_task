@@ -102,12 +102,14 @@ export default function Layout({ children }) {
           alt="Zomoto Logo"
           className="h-8 w-auto"
         />
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="rounded-full"
-          data-testid="mobile-menu-btn"
+        <div className="flex items-center gap-2">
+          <NotificationBell />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="rounded-full"
+            data-testid="mobile-menu-btn"
         >
           {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </Button>
