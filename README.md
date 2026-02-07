@@ -11,35 +11,33 @@ A production-ready, mobile-first restaurant task management system built with Re
 | Manager | manager@zomoto.lk | 123456 |
 | Staff | staff@zomoto.lk | 123456 |
 
-## 📊 Database Connection (MySQL)
+## 📊 Database Connection (MongoDB)
 
 ### Connection Details
 ```
 Host: localhost
 Database: zomoto_tasks
-User: root
-Password: (none)
-Port: 3306
+Port: 27017
 ```
 
 ### Connection String
 ```
-mysql+pymysql://root@localhost/zomoto_tasks
+mongodb://localhost:27017/zomoto_tasks
 ```
 
 ### Connect via Command Line
 ```bash
-mysql -u root zomoto_tasks
+mongosh zomoto_tasks
 ```
 
-### View Tables
+### View Collections
 ```bash
-mysql -u root zomoto_tasks -e "SHOW TABLES;"
+mongosh zomoto_tasks --eval "db.getCollectionNames()"
 ```
 
-### Database Tables
-| Table | Description |
-|-------|-------------|
+### Database Collections
+| Collection | Description |
+|------------|-------------|
 | users | User accounts (Owner, Manager, Staff) |
 | tasks | Task records with status tracking |
 | task_templates | Task library templates |
@@ -51,19 +49,19 @@ mysql -u root zomoto_tasks -e "SHOW TABLES;"
 | push_subscriptions | Web push subscriptions |
 | notification_logs | SMS/Push notification logs |
 
-### Sample Queries
-```sql
--- View all users
-SELECT id, name, email, role, status FROM users;
+### Sample Queries (MongoDB Shell)
+```javascript
+// View all users
+db.users.find({}, {password: 0})
 
--- View all tasks
-SELECT id, title, status, assigned_to_name, created_at FROM tasks;
+// View all tasks
+db.tasks.find({})
 
--- View task with comments count
-SELECT t.title, t.status, COUNT(c.id) as comments
-FROM tasks t
-LEFT JOIN task_comments c ON t.id = c.task_id
-GROUP BY t.id;
+// View tasks by status
+db.tasks.find({status: "COMPLETED"})
+
+// Count tasks per status
+db.tasks.aggregate([{$group: {_id: "$status", count: {$sum: 1}}}])
 ```
 
 ## 🛠️ Tech Stack
