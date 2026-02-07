@@ -68,7 +68,7 @@ db.tasks.aggregate([{$group: {_id: "$status", count: {$sum: 1}}}])
 
 - **Frontend**: React 19, Tailwind CSS, Shadcn UI
 - **Backend**: FastAPI, SQLAlchemy
-- **Database**: MySQL/MariaDB
+- **Database**: MongoDB
 - **Auth**: JWT with role-based access control
 - **Font**: DM Sans
 
