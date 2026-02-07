@@ -97,7 +97,8 @@ db.tasks.aggregate([{$group: {_id: "$status", count: {$sum: 1}}}])
 
 ### Backend (.env)
 ```env
-MYSQL_URL=mysql+pymysql://root@localhost/zomoto_tasks
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=zomoto_tasks
 JWT_SECRET=your-secret-key
 CORS_ORIGINS=*
 NOTIFY_LK_USER_ID=your-notify-user-id
