@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
@@ -8,14 +8,16 @@ import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 import httpx
 import aiofiles
 from PIL import Image
+import asyncio
+import json
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -30,6 +32,11 @@ SECRET_KEY = os.environ.get('JWT_SECRET', 'zomoto-tasks-secret-key-2024')
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
+# notify.lk Configuration
+NOTIFY_LK_USER_ID = os.environ.get('NOTIFY_LK_USER_ID', '28528')
+NOTIFY_LK_API_KEY = os.environ.get('NOTIFY_LK_API_KEY', 'JeP7ACSaYTSwOY5eCl6S')
+NOTIFY_LK_SENDER_ID = os.environ.get('NOTIFY_LK_SENDER_ID', 'Zeeha HLD')
+
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -37,12 +44,71 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
 # Create the main app
-app = FastAPI(title="Zomoto Tasks API", version="1.0.0")
+app = FastAPI(title="Zomoto Tasks API", version="2.0.0")
 api_router = APIRouter(prefix="/api")
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# WebSocket connection manager
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, List[WebSocket]] = {}
+    
+    async def connect(self, websocket: WebSocket, user_id: str):
+        await websocket.accept()
+        if user_id not in self.active_connections:
+            self.active_connections[user_id] = []
+        self.active_connections[user_id].append(websocket)
+    
+    def disconnect(self, websocket: WebSocket, user_id: str):
+        if user_id in self.active_connections:
+            if websocket in self.active_connections[user_id]:
+                self.active_connections[user_id].remove(websocket)
+    
+    async def broadcast_to_user(self, user_id: str, message: dict):
+        if user_id in self.active_connections:
+            for connection in self.active_connections[user_id]:
+                try:
+                    await connection.send_json(message)
+                except:
+                    pass
+    
+    async def broadcast_to_users(self, user_ids: List[str], message: dict):
+        for user_id in user_ids:
+            await self.broadcast_to_user(user_id, message)
+    
+    async def broadcast_to_all(self, message: dict):
+        for user_id, connections in self.active_connections.items():
+            for connection in connections:
+                try:
+                    await connection.send_json(message)
+                except:
+                    pass
+
+manager = ConnectionManager()
+
+# ============== ENUMS ==============
+
+class TaskStatus:
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    NOT_COMPLETED = "NOT_COMPLETED"
+    VERIFIED = "VERIFIED"
+
+class TaskType:
+    INSTANT = "INSTANT"
+    RECURRING = "RECURRING"
+
+class TimeUnit:
+    MINUTES = "MINUTES"
+    HOURS = "HOURS"
+
+class RecurrenceType:
+    DAILY = "DAILY"
+    MONTHLY = "MONTHLY"
 
 # ============== Pydantic Models ==============
 
@@ -102,20 +168,33 @@ class CategoryResponse(BaseModel):
     is_active: bool
     created_at: str
 
+class RecurrenceInterval(BaseModel):
+    start_day: int
+    end_day: int
+
 class TaskCreate(BaseModel):
     title: str
     description: Optional[str] = ""
     category: str = "Other"
     priority: str = "MEDIUM"
-    due_date: Optional[str] = None
+    task_type: str = "INSTANT"  # INSTANT or RECURRING
+    time_interval: int = 30  # Duration in time_unit
+    time_unit: str = "MINUTES"  # MINUTES or HOURS
+    allocated_datetime: str  # When task should start
     assigned_to: Optional[str] = None
+    # Recurring task fields
+    recurrence_type: Optional[str] = None  # DAILY or MONTHLY
+    recurrence_intervals: Optional[List[RecurrenceInterval]] = None  # For monthly
+    recurrence_end_date: Optional[str] = None  # Max 1 month
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
     category: Optional[str] = None
     priority: Optional[str] = None
-    due_date: Optional[str] = None
+    time_interval: Optional[int] = None
+    time_unit: Optional[str] = None
+    allocated_datetime: Optional[str] = None
     assigned_to: Optional[str] = None
     status: Optional[str] = None
 
@@ -125,14 +204,22 @@ class TaskResponse(BaseModel):
     description: str
     category: str
     priority: str
-    due_date: Optional[str]
+    task_type: str
+    time_interval: int
+    time_unit: str
+    allocated_datetime: Optional[str]
+    deadline: Optional[str]
+    start_time: Optional[str]
     status: str
     created_by: str
     created_by_name: str
     assigned_to: Optional[str]
     assigned_to_name: Optional[str]
+    is_overdue: bool
+    proof_photos: List[str]
     created_at: str
     updated_at: str
+    is_deleted: bool
 
 class CommentCreate(BaseModel):
     content: str
@@ -177,16 +264,17 @@ class AttachmentResponse(BaseModel):
 
 class DashboardStats(BaseModel):
     total_tasks: int
+    pending: int
     in_progress: int
     completed: int
+    not_completed: int
     verified: int
     tasks_to_assign: Optional[int] = None
     tasks_to_verify: Optional[int] = None
     total_staff: Optional[int] = None
 
-class PushSubscription(BaseModel):
-    endpoint: str
-    keys: dict
+class BulkDeleteRequest(BaseModel):
+    task_ids: List[str]
 
 # ============== Auth Helpers ==============
 
@@ -208,7 +296,6 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         user_id = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        
         user = await db.users.find_one({"id": user_id}, {"_id": 0})
         if user is None:
             raise HTTPException(status_code=401, detail="User not found")
@@ -251,6 +338,105 @@ async def create_notification(user_id: str, notification_type: str, title: str, 
         "created_at": datetime.now(timezone.utc).isoformat()
     }
     await db.notifications.insert_one(notification)
+    # Broadcast via WebSocket
+    await manager.broadcast_to_user(user_id, {"type": "notification", "data": notification})
+
+async def send_sms(phone: str, message: str, task_id: str = None):
+    """Send SMS via notify.lk"""
+    # Check for duplicate notification today
+    today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    if task_id:
+        existing = await db.notification_logs.find_one({
+            "task_id": task_id,
+            "type": "SMS",
+            "recipient": phone,
+            "created_at": {"$gte": today_start.isoformat()}
+        })
+        if existing:
+            logger.info(f"SMS already sent today for task {task_id} to {phone}")
+            return False
+    
+    # Format phone number for Sri Lanka
+    formatted_phone = phone.lstrip('0')
+    if not formatted_phone.startswith('94'):
+        formatted_phone = '94' + formatted_phone
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://app.notify.lk/api/v1/send",
+                data={
+                    "user_id": NOTIFY_LK_USER_ID,
+                    "api_key": NOTIFY_LK_API_KEY,
+                    "sender_id": NOTIFY_LK_SENDER_ID,
+                    "to": formatted_phone,
+                    "message": message
+                },
+                timeout=30.0
+            )
+            
+            # Log notification
+            await db.notification_logs.insert_one({
+                "id": str(uuid.uuid4()),
+                "type": "SMS",
+                "task_id": task_id,
+                "recipient": phone,
+                "message": message,
+                "status": "SENT" if response.status_code == 200 else "FAILED",
+                "response": response.text,
+                "created_at": datetime.now(timezone.utc).isoformat()
+            })
+            
+            logger.info(f"SMS sent to {formatted_phone}: {response.status_code}")
+            return response.status_code == 200
+    except Exception as e:
+        logger.error(f"SMS sending failed: {e}")
+        return False
+
+def calculate_deadline(allocated_datetime: str, time_interval: int, time_unit: str) -> datetime:
+    """Calculate deadline based on allocated time and interval"""
+    try:
+        allocated = datetime.fromisoformat(allocated_datetime.replace('Z', '+00:00'))
+        if time_unit == TimeUnit.HOURS:
+            return allocated + timedelta(hours=time_interval)
+        else:
+            return allocated + timedelta(minutes=time_interval)
+    except:
+        return None
+
+def is_task_overdue(task: dict) -> bool:
+    """Check if task is overdue"""
+    if task.get("status") in [TaskStatus.COMPLETED, TaskStatus.VERIFIED, TaskStatus.NOT_COMPLETED]:
+        return False
+    deadline = task.get("deadline")
+    if not deadline:
+        return False
+    try:
+        deadline_dt = datetime.fromisoformat(deadline.replace('Z', '+00:00'))
+        return datetime.now(timezone.utc) > deadline_dt
+    except:
+        return False
+
+def is_recurring_task_active(task: dict) -> bool:
+    """Check if recurring task should be visible today"""
+    if task.get("task_type") != TaskType.RECURRING:
+        return True
+    
+    today = datetime.now(timezone.utc).date()
+    recurrence_type = task.get("recurrence_type")
+    
+    if recurrence_type == RecurrenceType.DAILY:
+        return True
+    
+    if recurrence_type == RecurrenceType.MONTHLY:
+        intervals = task.get("recurrence_intervals", [])
+        current_day = today.day
+        for interval in intervals:
+            if interval.get("start_day", 0) <= current_day <= interval.get("end_day", 0):
+                return True
+        return False
+    
+    return True
 
 def optimize_image(file_path: Path, max_size: int = 1920):
     try:
@@ -268,6 +454,73 @@ def optimize_image(file_path: Path, max_size: int = 1920):
     except Exception as e:
         logger.error(f"Image optimization failed: {e}")
         return file_path, None
+
+def task_to_response(task: dict) -> TaskResponse:
+    return TaskResponse(
+        id=task["id"],
+        title=task["title"],
+        description=task.get("description", ""),
+        category=task.get("category", "Other"),
+        priority=task.get("priority", "MEDIUM"),
+        task_type=task.get("task_type", "INSTANT"),
+        time_interval=task.get("time_interval", 30),
+        time_unit=task.get("time_unit", "MINUTES"),
+        allocated_datetime=task.get("allocated_datetime"),
+        deadline=task.get("deadline"),
+        start_time=task.get("start_time"),
+        status=task.get("status", "PENDING"),
+        created_by=task.get("created_by", ""),
+        created_by_name=task.get("created_by_name", ""),
+        assigned_to=task.get("assigned_to"),
+        assigned_to_name=task.get("assigned_to_name"),
+        is_overdue=is_task_overdue(task),
+        proof_photos=task.get("proof_photos", []),
+        created_at=task.get("created_at", ""),
+        updated_at=task.get("updated_at", ""),
+        is_deleted=task.get("is_deleted", False)
+    )
+
+# ============== Background Task: Check Overdue Tasks ==============
+
+async def check_overdue_tasks():
+    """Background task to mark overdue tasks as NOT_COMPLETED"""
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            # Find tasks that are overdue and not yet marked
+            overdue_tasks = await db.tasks.find({
+                "status": {"$in": [TaskStatus.PENDING, TaskStatus.IN_PROGRESS]},
+                "deadline": {"$lt": now.isoformat()},
+                "is_deleted": {"$ne": True}
+            }, {"_id": 0}).to_list(1000)
+            
+            for task in overdue_tasks:
+                await db.tasks.update_one(
+                    {"id": task["id"]},
+                    {"$set": {"status": TaskStatus.NOT_COMPLETED, "updated_at": now.isoformat()}}
+                )
+                await log_activity(task["id"], "SYSTEM", "System", "STATUS_CHANGED", "Task auto-marked as NOT_COMPLETED (deadline exceeded)")
+                
+                # Notify assigned user
+                if task.get("assigned_to"):
+                    await create_notification(
+                        task["assigned_to"],
+                        "TASK_EXPIRED",
+                        "Task Deadline Exceeded",
+                        f"Task '{task['title']}' was not completed in time",
+                        task["id"]
+                    )
+                
+                # Broadcast update
+                await manager.broadcast_to_all({
+                    "type": "task_update",
+                    "data": task_to_response({**task, "status": TaskStatus.NOT_COMPLETED}).model_dump()
+                })
+            
+            await asyncio.sleep(30)  # Check every 30 seconds
+        except Exception as e:
+            logger.error(f"Error in overdue check: {e}")
+            await asyncio.sleep(60)
 
 # ============== AUTH ROUTES ==============
 
@@ -419,36 +672,92 @@ async def delete_task_template(template_id: str, current_user: dict = Depends(re
 @api_router.post("/tasks", response_model=TaskResponse)
 async def create_task(task_data: TaskCreate, current_user: dict = Depends(require_roles(["OWNER", "MANAGER"]))):
     assigned_to_name = None
-    status = "CREATED"
+    assigned_user = None
+    
     if task_data.assigned_to:
         assigned_user = await db.users.find_one({"id": task_data.assigned_to}, {"_id": 0})
         if assigned_user:
             assigned_to_name = assigned_user["name"]
-            status = "ASSIGNED"
     
-    task = {"id": str(uuid.uuid4()), "title": task_data.title, "description": task_data.description or "", "category": task_data.category, "priority": task_data.priority, "due_date": task_data.due_date, "status": status, "created_by": current_user["id"], "created_by_name": current_user["name"], "assigned_to": task_data.assigned_to, "assigned_to_name": assigned_to_name, "created_at": datetime.now(timezone.utc).isoformat(), "updated_at": datetime.now(timezone.utc).isoformat()}
+    # Calculate deadline
+    deadline = calculate_deadline(task_data.allocated_datetime, task_data.time_interval, task_data.time_unit)
+    
+    task = {
+        "id": str(uuid.uuid4()),
+        "title": task_data.title,
+        "description": task_data.description or "",
+        "category": task_data.category,
+        "priority": task_data.priority,
+        "task_type": task_data.task_type,
+        "time_interval": task_data.time_interval,
+        "time_unit": task_data.time_unit,
+        "allocated_datetime": task_data.allocated_datetime,
+        "deadline": deadline.isoformat() if deadline else None,
+        "start_time": None,
+        "status": TaskStatus.PENDING,
+        "created_by": current_user["id"],
+        "created_by_name": current_user["name"],
+        "assigned_to": task_data.assigned_to,
+        "assigned_to_name": assigned_to_name,
+        "proof_photos": [],
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    # Add recurring fields if applicable
+    if task_data.task_type == TaskType.RECURRING:
+        task["recurrence_type"] = task_data.recurrence_type
+        task["recurrence_intervals"] = [i.model_dump() for i in (task_data.recurrence_intervals or [])]
+        task["recurrence_end_date"] = task_data.recurrence_end_date
+    
     await db.tasks.insert_one(task)
     await log_activity(task["id"], current_user["id"], current_user["name"], "CREATED", f"Task '{task['title']}' created")
-    if task_data.assigned_to:
-        await log_activity(task["id"], current_user["id"], current_user["name"], "ASSIGNED", f"Task assigned to {assigned_to_name}")
+    
+    # Send notifications if assigned
+    if task_data.assigned_to and assigned_user:
         await create_notification(task_data.assigned_to, "TASK_ASSIGNED", "New Task Assigned", f"You have been assigned: {task['title']}", task["id"])
-    return TaskResponse(**{k: v for k, v in task.items() if k != "_id"})
+        # Send SMS
+        if assigned_user.get("phone"):
+            await send_sms(assigned_user["phone"], f"New task assigned: {task['title']}. Deadline: {task_data.time_interval} {task_data.time_unit.lower()}", task["id"])
+    
+    # Broadcast to all managers/owners
+    await manager.broadcast_to_all({"type": "task_created", "data": task_to_response(task).model_dump()})
+    
+    return task_to_response(task)
 
 @api_router.get("/tasks", response_model=List[TaskResponse])
-async def get_tasks(status: Optional[str] = None, assigned_to: Optional[str] = None, category: Optional[str] = None, priority: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+async def get_tasks(status: Optional[str] = None, assigned_to: Optional[str] = None, category: Optional[str] = None, priority: Optional[str] = None, include_deleted: bool = False, current_user: dict = Depends(get_current_user)):
     query = {}
+    
+    if not include_deleted:
+        query["is_deleted"] = {"$ne": True}
+    
     if current_user["role"] == "STAFF":
         query["assigned_to"] = current_user["id"]
     elif assigned_to:
         query["assigned_to"] = assigned_to
+    
     if status:
         query["status"] = status
     if category:
         query["category"] = category
     if priority:
         query["priority"] = priority
+    
     tasks = await db.tasks.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
-    return [TaskResponse(**t) for t in tasks]
+    
+    # Filter recurring tasks based on schedule
+    active_tasks = []
+    for task in tasks:
+        if is_recurring_task_active(task):
+            # Check and update overdue status
+            if is_task_overdue(task) and task["status"] not in [TaskStatus.NOT_COMPLETED, TaskStatus.COMPLETED, TaskStatus.VERIFIED]:
+                await db.tasks.update_one({"id": task["id"]}, {"$set": {"status": TaskStatus.NOT_COMPLETED}})
+                task["status"] = TaskStatus.NOT_COMPLETED
+            active_tasks.append(task_to_response(task))
+    
+    return active_tasks
 
 @api_router.get("/tasks/{task_id}", response_model=TaskResponse)
 async def get_task(task_id: str, current_user: dict = Depends(get_current_user)):
@@ -457,7 +766,7 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
         raise HTTPException(status_code=404, detail="Task not found")
     if current_user["role"] == "STAFF" and task.get("assigned_to") != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
-    return TaskResponse(**task)
+    return task_to_response(task)
 
 @api_router.put("/tasks/{task_id}", response_model=TaskResponse)
 async def update_task(task_id: str, task_data: TaskUpdate, current_user: dict = Depends(get_current_user)):
@@ -468,58 +777,223 @@ async def update_task(task_id: str, task_data: TaskUpdate, current_user: dict = 
     if current_user["role"] == "STAFF":
         if task.get("assigned_to") != current_user["id"]:
             raise HTTPException(status_code=403, detail="Access denied")
-        update_data = {}
+        # Staff can only update status
         if task_data.status:
-            valid_transitions = {"ASSIGNED": ["IN_PROGRESS"], "IN_PROGRESS": ["COMPLETED"]}
-            if task_data.status not in valid_transitions.get(task["status"], []):
-                raise HTTPException(status_code=400, detail=f"Invalid status transition from {task['status']}")
-            update_data["status"] = task_data.status
-            await log_activity(task_id, current_user["id"], current_user["name"], "STATUS_CHANGED", f"Status changed to {task_data.status}")
-            if task_data.status == "COMPLETED" and task.get("created_by"):
-                await create_notification(task["created_by"], "TASK_COMPLETED", "Task Completed", f"Task '{task['title']}' has been completed", task_id)
+            raise HTTPException(status_code=400, detail="Use /start or /complete endpoints")
     else:
         update_data = {k: v for k, v in task_data.model_dump().items() if v is not None}
+        
+        # Recalculate deadline if time changed
+        if task_data.time_interval or task_data.time_unit or task_data.allocated_datetime:
+            allocated = task_data.allocated_datetime or task.get("allocated_datetime")
+            interval = task_data.time_interval or task.get("time_interval", 30)
+            unit = task_data.time_unit or task.get("time_unit", "MINUTES")
+            deadline = calculate_deadline(allocated, interval, unit)
+            if deadline:
+                update_data["deadline"] = deadline.isoformat()
+        
         if task_data.assigned_to:
             assigned_user = await db.users.find_one({"id": task_data.assigned_to}, {"_id": 0})
             if assigned_user:
                 update_data["assigned_to_name"] = assigned_user["name"]
-                if task["status"] == "CREATED":
-                    update_data["status"] = "ASSIGNED"
                 await log_activity(task_id, current_user["id"], current_user["name"], "REASSIGNED", f"Task reassigned to {assigned_user['name']}")
                 await create_notification(task_data.assigned_to, "TASK_ASSIGNED", "Task Assigned", f"You have been assigned: {task['title']}", task_id)
-        if task_data.status:
-            await log_activity(task_id, current_user["id"], current_user["name"], "STATUS_CHANGED", f"Status changed to {task_data.status}")
+                if assigned_user.get("phone"):
+                    await send_sms(assigned_user["phone"], f"Task assigned: {task['title']}", task_id)
+        
+        if update_data:
+            update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
+            await db.tasks.update_one({"id": task_id}, {"$set": update_data})
     
-    if update_data:
-        update_data["updated_at"] = datetime.now(timezone.utc).isoformat()
-        await db.tasks.update_one({"id": task_id}, {"$set": update_data})
     updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
-    return TaskResponse(**updated_task)
+    
+    # Broadcast update
+    await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(updated_task).model_dump()})
+    
+    return task_to_response(updated_task)
 
-@api_router.delete("/tasks/{task_id}")
-async def delete_task(task_id: str, current_user: dict = Depends(require_roles(["OWNER", "MANAGER"]))):
+@api_router.post("/tasks/{task_id}/start", response_model=TaskResponse)
+async def start_task(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Staff starts working on a task"""
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    await db.tasks.delete_one({"id": task_id})
-    await db.task_comments.delete_many({"task_id": task_id})
-    await db.task_attachments.delete_many({"task_id": task_id})
-    await db.task_activity_logs.delete_many({"task_id": task_id})
-    return {"message": "Task deleted successfully"}
+    
+    if current_user["role"] == "STAFF" and task.get("assigned_to") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if task["status"] != TaskStatus.PENDING:
+        raise HTTPException(status_code=400, detail="Task can only be started from PENDING status")
+    
+    now = datetime.now(timezone.utc)
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$set": {"status": TaskStatus.IN_PROGRESS, "start_time": now.isoformat(), "updated_at": now.isoformat()}}
+    )
+    
+    await log_activity(task_id, current_user["id"], current_user["name"], "STARTED", "Task started")
+    
+    updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(updated_task).model_dump()})
+    
+    return task_to_response(updated_task)
+
+@api_router.post("/tasks/{task_id}/complete", response_model=TaskResponse)
+async def complete_task(task_id: str, current_user: dict = Depends(get_current_user)):
+    """Staff marks task as completed (requires proof photos)"""
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if current_user["role"] == "STAFF" and task.get("assigned_to") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if task["status"] != TaskStatus.IN_PROGRESS:
+        raise HTTPException(status_code=400, detail="Task can only be completed from IN_PROGRESS status")
+    
+    # Check if proof photos exist
+    if not task.get("proof_photos") or len(task.get("proof_photos", [])) == 0:
+        raise HTTPException(status_code=400, detail="Please upload proof photos before completing the task")
+    
+    now = datetime.now(timezone.utc)
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$set": {"status": TaskStatus.COMPLETED, "updated_at": now.isoformat()}}
+    )
+    
+    await log_activity(task_id, current_user["id"], current_user["name"], "COMPLETED", "Task completed")
+    
+    # Notify creator
+    if task.get("created_by"):
+        await create_notification(task["created_by"], "TASK_COMPLETED", "Task Completed", f"Task '{task['title']}' has been completed", task_id)
+    
+    updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(updated_task).model_dump()})
+    
+    return task_to_response(updated_task)
 
 @api_router.post("/tasks/{task_id}/verify", response_model=TaskResponse)
 async def verify_task(task_id: str, current_user: dict = Depends(require_roles(["OWNER", "MANAGER"]))):
     task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    if task["status"] != "COMPLETED":
+    
+    if task["status"] != TaskStatus.COMPLETED:
         raise HTTPException(status_code=400, detail="Only completed tasks can be verified")
-    await db.tasks.update_one({"id": task_id}, {"$set": {"status": "VERIFIED", "updated_at": datetime.now(timezone.utc).isoformat()}})
+    
+    now = datetime.now(timezone.utc)
+    await db.tasks.update_one({"id": task_id}, {"$set": {"status": TaskStatus.VERIFIED, "updated_at": now.isoformat()}})
     await log_activity(task_id, current_user["id"], current_user["name"], "VERIFIED", "Task verified")
+    
     if task.get("assigned_to"):
         await create_notification(task["assigned_to"], "TASK_VERIFIED", "Task Verified", f"Your task '{task['title']}' has been verified", task_id)
+    
     updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
-    return TaskResponse(**updated_task)
+    await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(updated_task).model_dump()})
+    
+    return task_to_response(updated_task)
+
+@api_router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str, current_user: dict = Depends(require_roles(["OWNER", "MANAGER"]))):
+    """Soft delete a single task"""
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    await db.tasks.update_one({"id": task_id}, {"$set": {"is_deleted": True, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    await log_activity(task_id, current_user["id"], current_user["name"], "DELETED", "Task deleted")
+    
+    await manager.broadcast_to_all({"type": "task_deleted", "data": {"id": task_id}})
+    
+    return {"message": "Task deleted successfully"}
+
+@api_router.post("/tasks/bulk-delete")
+async def bulk_delete_tasks(request: BulkDeleteRequest, current_user: dict = Depends(require_roles(["OWNER", "MANAGER"]))):
+    """Soft delete multiple tasks"""
+    now = datetime.now(timezone.utc).isoformat()
+    
+    for task_id in request.task_ids:
+        await db.tasks.update_one({"id": task_id}, {"$set": {"is_deleted": True, "updated_at": now}})
+        await log_activity(task_id, current_user["id"], current_user["name"], "DELETED", "Task deleted (bulk)")
+    
+    await manager.broadcast_to_all({"type": "tasks_deleted", "data": {"ids": request.task_ids}})
+    
+    return {"message": f"{len(request.task_ids)} tasks deleted successfully"}
+
+# ============== PROOF PHOTO UPLOAD ==============
+
+@api_router.post("/tasks/{task_id}/proof")
+async def upload_proof_photo(task_id: str, file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Upload proof photo for task completion"""
+    task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    if current_user["role"] == "STAFF" and task.get("assigned_to") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    if task["status"] not in [TaskStatus.IN_PROGRESS, TaskStatus.PENDING]:
+        raise HTTPException(status_code=400, detail="Can only upload proof for pending or in-progress tasks")
+    
+    # Save file
+    upload_dir = ROOT_DIR / "uploads" / "proofs" / task_id
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    
+    file_id = str(uuid.uuid4())
+    file_ext = Path(file.filename).suffix.lower()
+    file_path = upload_dir / f"{file_id}{file_ext}"
+    
+    content = await file.read()
+    async with aiofiles.open(file_path, 'wb') as f:
+        await f.write(content)
+    
+    # Optimize image
+    if file.content_type and file.content_type.startswith('image/'):
+        try:
+            optimized_path, _ = optimize_image(file_path)
+            if optimized_path != file_path:
+                file_path.unlink(missing_ok=True)
+                file_path = optimized_path
+        except:
+            pass
+    
+    # Add to proof_photos array
+    photo_url = f"/api/proofs/{task_id}/{file_id}"
+    await db.tasks.update_one(
+        {"id": task_id},
+        {"$push": {"proof_photos": photo_url}, "$set": {"updated_at": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Store file info
+    await db.proof_photos.insert_one({
+        "id": file_id,
+        "task_id": task_id,
+        "filename": file.filename,
+        "file_path": str(file_path),
+        "content_type": file.content_type,
+        "uploaded_by": current_user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    })
+    
+    await log_activity(task_id, current_user["id"], current_user["name"], "PROOF_UPLOADED", f"Proof photo uploaded: {file.filename}")
+    
+    updated_task = await db.tasks.find_one({"id": task_id}, {"_id": 0})
+    await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(updated_task).model_dump()})
+    
+    return {"id": file_id, "url": photo_url, "message": "Proof photo uploaded successfully"}
+
+@api_router.get("/proofs/{task_id}/{photo_id}")
+async def get_proof_photo(task_id: str, photo_id: str):
+    """Get proof photo file"""
+    photo = await db.proof_photos.find_one({"id": photo_id, "task_id": task_id}, {"_id": 0})
+    if not photo:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    
+    file_path = Path(photo["file_path"])
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    return FileResponse(path=file_path, media_type=photo.get("content_type", "image/jpeg"))
 
 # ============== COMMENTS ROUTES ==============
 
@@ -530,9 +1004,14 @@ async def add_comment(task_id: str, comment_data: CommentCreate, current_user: d
         raise HTTPException(status_code=404, detail="Task not found")
     if current_user["role"] == "STAFF" and task.get("assigned_to") != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
+    
     comment = {"id": str(uuid.uuid4()), "task_id": task_id, "user_id": current_user["id"], "user_name": current_user["name"], "content": comment_data.content, "created_at": datetime.now(timezone.utc).isoformat()}
     await db.task_comments.insert_one(comment)
     await log_activity(task_id, current_user["id"], current_user["name"], "COMMENT_ADDED", f"Comment: {comment_data.content[:50]}...")
+    
+    # Broadcast comment
+    await manager.broadcast_to_all({"type": "comment_added", "data": {"task_id": task_id, "comment": comment}})
+    
     return CommentResponse(**{k: v for k, v in comment.items() if k != "_id"})
 
 @api_router.get("/tasks/{task_id}/comments", response_model=List[CommentResponse])
@@ -639,19 +1118,48 @@ async def mark_all_notifications_read(current_user: dict = Depends(get_current_u
 
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
 async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
-    query = {}
+    query = {"is_deleted": {"$ne": True}}
     if current_user["role"] == "STAFF":
         query["assigned_to"] = current_user["id"]
+    
     total_tasks = await db.tasks.count_documents(query)
-    in_progress = await db.tasks.count_documents({**query, "status": "IN_PROGRESS"})
-    completed = await db.tasks.count_documents({**query, "status": "COMPLETED"})
-    verified = await db.tasks.count_documents({**query, "status": "VERIFIED"})
-    stats = DashboardStats(total_tasks=total_tasks, in_progress=in_progress, completed=completed, verified=verified)
+    pending = await db.tasks.count_documents({**query, "status": TaskStatus.PENDING})
+    in_progress = await db.tasks.count_documents({**query, "status": TaskStatus.IN_PROGRESS})
+    completed = await db.tasks.count_documents({**query, "status": TaskStatus.COMPLETED})
+    not_completed = await db.tasks.count_documents({**query, "status": TaskStatus.NOT_COMPLETED})
+    verified = await db.tasks.count_documents({**query, "status": TaskStatus.VERIFIED})
+    
+    stats = DashboardStats(total_tasks=total_tasks, pending=pending, in_progress=in_progress, completed=completed, not_completed=not_completed, verified=verified)
+    
     if current_user["role"] in ["OWNER", "MANAGER"]:
-        stats.tasks_to_assign = await db.tasks.count_documents({"status": "CREATED"})
-        stats.tasks_to_verify = await db.tasks.count_documents({"status": "COMPLETED"})
+        stats.tasks_to_assign = await db.tasks.count_documents({"status": TaskStatus.PENDING, "assigned_to": None, "is_deleted": {"$ne": True}})
+        stats.tasks_to_verify = await db.tasks.count_documents({"status": TaskStatus.COMPLETED, "is_deleted": {"$ne": True}})
         stats.total_staff = await db.users.count_documents({"role": "STAFF", "status": "ACTIVE"})
+    
     return stats
+
+# ============== WEBSOCKET ==============
+
+@app.websocket("/ws/{token}")
+async def websocket_endpoint(websocket: WebSocket, token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            await websocket.close(code=4001)
+            return
+        
+        await manager.connect(websocket, user_id)
+        try:
+            while True:
+                data = await websocket.receive_text()
+                # Handle ping/pong or other messages
+                if data == "ping":
+                    await websocket.send_text("pong")
+        except WebSocketDisconnect:
+            manager.disconnect(websocket, user_id)
+    except JWTError:
+        await websocket.close(code=4001)
 
 # ============== SEED DATA ==============
 
@@ -688,10 +1196,15 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Start background task on startup
+@app.on_event("startup")
+async def startup_event():
+    asyncio.create_task(check_overdue_tasks())
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
