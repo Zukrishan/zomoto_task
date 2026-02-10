@@ -299,20 +299,36 @@ export default function TaskDetailPage() {
 
         {/* Status & Priority Badges */}
         <div className="flex gap-2 flex-wrap">
-          <Badge className={STATUS_CONFIG[task.status]?.color} data-testid="task-status">
+          <Badge className={`${STATUS_CONFIG[task.status]?.color} ${isOverdue || isNotCompleted ? 'animate-pulse' : ''}`} data-testid="task-status">
             {STATUS_CONFIG[task.status]?.label}
           </Badge>
           <Badge className={PRIORITY_CONFIG[task.priority]?.color} data-testid="task-priority">
             {PRIORITY_CONFIG[task.priority]?.label} Priority
           </Badge>
           <Badge variant="outline" data-testid="task-category">{task.category}</Badge>
+          {task.task_type === 'RECURRING' && (
+            <Badge variant="outline" className="border-blue-500 text-blue-700">
+              <Repeat className="h-3 w-3 mr-1" />
+              Recurring
+            </Badge>
+          )}
         </div>
+
+        {/* Overdue Warning */}
+        {(isOverdue || isNotCompleted) && (
+          <div className="bg-red-50 border border-red-200 rounded-xl p-3 flex items-center gap-2 text-red-700">
+            <AlertCircle className="h-5 w-5" />
+            <span className="font-medium">
+              {isNotCompleted ? 'Task was not completed in time' : 'Task deadline exceeded'}
+            </span>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex gap-2 flex-wrap">
           {canStartTask && (
             <Button
-              onClick={() => handleStatusUpdate('IN_PROGRESS')}
+              onClick={handleStartTask}
               disabled={updating}
               className="bg-amber-500 hover:bg-amber-600 text-white rounded-full"
               data-testid="start-task-btn"
@@ -322,15 +338,23 @@ export default function TaskDetailPage() {
             </Button>
           )}
           {canCompleteTask && (
-            <Button
-              onClick={() => handleStatusUpdate('COMPLETED')}
-              disabled={updating}
-              className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-full"
-              data-testid="complete-task-btn"
-            >
-              {updating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
-              Mark Complete
-            </Button>
+            <>
+              {!hasProofPhotos && (
+                <div className="w-full text-amber-600 text-sm flex items-center gap-2 mb-2">
+                  <Camera className="h-4 w-4" />
+                  <span>Upload proof photo(s) before completing</span>
+                </div>
+              )}
+              <Button
+                onClick={handleCompleteTask}
+                disabled={updating || !hasProofPhotos}
+                className={`rounded-full ${hasProofPhotos ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-zinc-400'} text-white`}
+                data-testid="complete-task-btn"
+              >
+                {updating ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle2 className="h-4 w-4 mr-2" />}
+                Mark Complete
+              </Button>
+            </>
           )}
           {canVerify && (
             <Button
