@@ -3,8 +3,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Loader2, Plus, Calendar as CalendarIcon, X } from 'lucide-react';
-import { format } from 'date-fns';
+import { Loader2, Plus, Calendar as CalendarIcon, X, Clock, Repeat } from 'lucide-react';
+import { format, addHours, addMinutes } from 'date-fns';
 import api from '../lib/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -37,17 +37,29 @@ const PRIORITY_OPTIONS = [
   { value: 'MEDIUM', label: 'Medium' },
   { value: 'LOW', label: 'Low' },
 ];
+const TIME_UNIT_OPTIONS = [
+  { value: 'MINUTES', label: 'Minutes' },
+  { value: 'HOURS', label: 'Hours' },
+];
+const TASK_TYPE_OPTIONS = [
+  { value: 'INSTANT', label: 'Instant Task' },
+  { value: 'RECURRING', label: 'Recurring Task' },
+];
 
 export default function CreateTaskModal({ open, onClose, onSuccess }) {
   const modalRef = useRef(null);
   const [templates, setTemplates] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(null);
+  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [selectedTime, setSelectedTime] = useState(format(new Date(), 'HH:mm'));
   const [selectedStaff, setSelectedStaff] = useState('');
   const [showTemplateList, setShowTemplateList] = useState(false);
   const [category, setCategory] = useState('Other');
   const [priority, setPriority] = useState('MEDIUM');
+  const [taskType, setTaskType] = useState('INSTANT');
+  const [timeInterval, setTimeInterval] = useState(30);
+  const [timeUnit, setTimeUnit] = useState('MINUTES');
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
     resolver: zodResolver(taskSchema),
@@ -66,6 +78,9 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
       fetchTemplates();
       fetchStaff();
       document.body.style.overflow = 'hidden';
+      // Set default allocated time to now
+      setSelectedDate(new Date());
+      setSelectedTime(format(new Date(), 'HH:mm'));
     } else {
       document.body.style.overflow = '';
     }
@@ -121,12 +136,20 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
   const onSubmit = async (data) => {
     setLoading(true);
     try {
+      // Combine date and time for allocated_datetime
+      const [hours, minutes] = selectedTime.split(':');
+      const allocatedDateTime = new Date(selectedDate);
+      allocatedDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+      
       const taskData = {
         title: data.title,
         description: data.description || '',
         category: category,
         priority: priority,
-        due_date: selectedDate ? selectedDate.toISOString() : null,
+        task_type: taskType,
+        time_interval: parseInt(timeInterval),
+        time_unit: timeUnit,
+        allocated_datetime: allocatedDateTime.toISOString(),
         assigned_to: selectedStaff || null,
       };
       
@@ -143,12 +166,28 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
 
   const handleClose = () => {
     reset();
-    setSelectedDate(null);
+    setSelectedDate(new Date());
+    setSelectedTime(format(new Date(), 'HH:mm'));
     setSelectedStaff('');
     setCategory('Other');
     setPriority('MEDIUM');
+    setTaskType('INSTANT');
+    setTimeInterval(30);
+    setTimeUnit('MINUTES');
     setShowTemplateList(false);
     onClose();
+  };
+
+  // Calculate deadline preview
+  const getDeadlinePreview = () => {
+    const [hours, minutes] = selectedTime.split(':');
+    const allocatedDateTime = new Date(selectedDate);
+    allocatedDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
+    
+    if (timeUnit === 'HOURS') {
+      return addHours(allocatedDateTime, parseInt(timeInterval));
+    }
+    return addMinutes(allocatedDateTime, parseInt(timeInterval));
   };
 
   const filteredTemplates = templates.filter(t => 
@@ -189,6 +228,26 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
 
         {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
+          {/* Task Type */}
+          <div className="space-y-2">
+            <Label>Task Type</Label>
+            <Select value={taskType} onValueChange={setTaskType}>
+              <SelectTrigger className="rounded-xl" data-testid="task-type-select">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {TASK_TYPE_OPTIONS.map(opt => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    <div className="flex items-center gap-2">
+                      {opt.value === 'RECURRING' && <Repeat className="h-4 w-4" />}
+                      {opt.label}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           {/* Task Title with Autocomplete */}
           <div className="space-y-2">
             <Label htmlFor="title">Task Name</Label>
@@ -293,30 +352,79 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
             </div>
           </div>
 
-          {/* Due Date */}
+          {/* Time Interval */}
           <div className="space-y-2">
-            <Label>Due Date (Optional)</Label>
-            <Popover>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full justify-start text-left font-normal rounded-xl h-12"
-                  data-testid="task-due-date-btn"
-                >
-                  <CalendarIcon className="mr-2 h-4 w-4" />
-                  {selectedDate ? format(selectedDate, 'PPP') : 'Select date'}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  selected={selectedDate}
-                  onSelect={setSelectedDate}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <Label className="flex items-center gap-2">
+              <Clock className="h-4 w-4" />
+              Time Allowed (Required)
+            </Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Input
+                type="number"
+                min="1"
+                max="1440"
+                value={timeInterval}
+                onChange={(e) => setTimeInterval(e.target.value)}
+                className="rounded-xl"
+                data-testid="time-interval-input"
+              />
+              <Select value={timeUnit} onValueChange={setTimeUnit}>
+                <SelectTrigger className="rounded-xl" data-testid="time-unit-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {TIME_UNIT_OPTIONS.map(opt => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* Allocated Date & Time */}
+          <div className="space-y-2">
+            <Label>Start Date & Time</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full justify-start text-left font-normal rounded-xl h-12"
+                    data-testid="task-date-btn"
+                  >
+                    <CalendarIcon className="mr-2 h-4 w-4" />
+                    {format(selectedDate, 'MMM d, yyyy')}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-0" align="start">
+                  <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(date) => date && setSelectedDate(date)}
+                    initialFocus
+                  />
+                </PopoverContent>
+              </Popover>
+              <Input
+                type="time"
+                value={selectedTime}
+                onChange={(e) => setSelectedTime(e.target.value)}
+                className="rounded-xl h-12"
+                data-testid="task-time-input"
+              />
+            </div>
+          </div>
+
+          {/* Deadline Preview */}
+          <div className="bg-zinc-50 rounded-xl p-3 text-sm">
+            <div className="flex items-center gap-2 text-zinc-600">
+              <Clock className="h-4 w-4" />
+              <span>Deadline will be:</span>
+              <span className="font-medium text-zinc-900">
+                {format(getDeadlinePreview(), 'MMM d, yyyy h:mm a')}
+              </span>
+            </div>
           </div>
 
           {/* Assign To */}
