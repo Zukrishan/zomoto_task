@@ -127,6 +127,37 @@ export default function TaskDetailPage() {
     }
   };
 
+  const handleStartTask = async () => {
+    setUpdating(true);
+    try {
+      await api.post(`/tasks/${taskId}/start`);
+      toast.success('Task started');
+      fetchTaskData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to start task');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  const handleCompleteTask = async () => {
+    // Check if proof photos exist
+    if (!task.proof_photos || task.proof_photos.length === 0) {
+      toast.error('Please upload proof photos before completing the task');
+      return;
+    }
+    setUpdating(true);
+    try {
+      await api.post(`/tasks/${taskId}/complete`);
+      toast.success('Task completed');
+      fetchTaskData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to complete task');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
   const handleVerify = async () => {
     setUpdating(true);
     try {
