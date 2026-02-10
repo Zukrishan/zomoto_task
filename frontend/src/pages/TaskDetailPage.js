@@ -487,6 +487,69 @@ export default function TaskDetailPage() {
           </CardContent>
         </Card>
 
+        {/* Proof Photos Section - Required for completion */}
+        {(canUploadProof || hasProofPhotos) && (
+          <Card className="bg-white rounded-2xl border border-zinc-100 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Camera className="h-5 w-5 text-[#E23744]" />
+                Proof Photos
+                {canCompleteTask && !hasProofPhotos && (
+                  <Badge variant="outline" className="text-amber-600 border-amber-300">Required</Badge>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0">
+              {/* Proof photo upload */}
+              {canUploadProof && (
+                <label className="cursor-pointer mb-4 block">
+                  <div className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-amber-300 rounded-xl hover:border-[#E23744] bg-amber-50 transition-colors">
+                    <Camera className="h-5 w-5 text-amber-500" />
+                    <span className="text-amber-700 font-medium">Upload Proof Photo</span>
+                  </div>
+                  <input 
+                    type="file" 
+                    className="hidden" 
+                    onChange={handleProofUpload}
+                    accept="image/*"
+                    data-testid="proof-upload-input"
+                  />
+                </label>
+              )}
+              
+              {/* Display proof photos */}
+              {hasProofPhotos && (
+                <div className="grid grid-cols-2 gap-2">
+                  {task.proof_photos.map((photoUrl, index) => {
+                    const backendUrl = process.env.REACT_APP_BACKEND_URL;
+                    const fullUrl = `${backendUrl}${photoUrl}`;
+                    return (
+                      <div 
+                        key={index}
+                        className="relative aspect-square rounded-xl overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => setViewerImage({ url: fullUrl, filename: `Proof ${index + 1}` })}
+                      >
+                        <img 
+                          src={fullUrl}
+                          alt={`Proof ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+                          Proof {index + 1}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              
+              {!hasProofPhotos && !canUploadProof && (
+                <p className="text-zinc-400 text-center py-4">No proof photos uploaded yet</p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
         {/* Tabs for Comments, Attachments, Activity */}
         <Tabs defaultValue="comments" className="w-full">
           <TabsList className="grid w-full grid-cols-3 rounded-xl bg-zinc-100 p-1">
