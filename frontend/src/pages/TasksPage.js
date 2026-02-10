@@ -57,9 +57,10 @@ export default function TasksPage() {
     priority: 'ALL',
   });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchTasks();
-  }, [filters]);
+  }, [filters.status, filters.category, filters.priority]);
 
   const fetchTasks = async () => {
     setLoading(true);
