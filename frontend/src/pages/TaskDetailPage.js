@@ -520,26 +520,14 @@ export default function TaskDetailPage() {
               {/* Display proof photos */}
               {hasProofPhotos && (
                 <div className="grid grid-cols-2 gap-2">
-                  {task.proof_photos.map((photoUrl, index) => {
-                    const backendUrl = process.env.REACT_APP_BACKEND_URL;
-                    const fullUrl = `${backendUrl}${photoUrl}`;
-                    return (
-                      <div 
-                        key={index}
-                        className="relative aspect-square rounded-xl overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => setViewerImage({ url: fullUrl, filename: `Proof ${index + 1}` })}
-                      >
-                        <img 
-                          src={fullUrl}
-                          alt={`Proof ${index + 1}`}
-                          className="w-full h-full object-cover"
-                        />
-                        <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
-                          Proof {index + 1}
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {task.proof_photos.map((photoUrl, index) => (
+                    <ProofPhotoItem 
+                      key={index}
+                      photoUrl={photoUrl}
+                      index={index}
+                      onView={(url, filename) => setViewerImage({ url, filename })}
+                    />
+                  ))}
                 </div>
               )}
               
