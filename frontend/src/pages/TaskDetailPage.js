@@ -62,6 +62,29 @@ const PRIORITY_CONFIG = {
   LOW: { label: 'Low', color: 'bg-green-100 text-green-700' },
 };
 
+// Simple component for proof photo display
+function ProofPhotoItem({ photoUrl, index, onView }) {
+  const backendUrl = process.env.REACT_APP_BACKEND_URL;
+  const fullUrl = backendUrl + photoUrl;
+  const label = 'Proof ' + (index + 1);
+  
+  return (
+    <div 
+      className="relative aspect-square rounded-xl overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
+      onClick={() => onView(fullUrl, label)}
+    >
+      <img 
+        src={fullUrl}
+        alt={label}
+        className="w-full h-full object-cover"
+      />
+      <div className="absolute bottom-2 left-2 bg-black/50 text-white text-xs px-2 py-1 rounded">
+        {label}
+      </div>
+    </div>
+  );
+}
+
 export default function TaskDetailPage() {
   const { taskId } = useParams();
   const navigate = useNavigate();
