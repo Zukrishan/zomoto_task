@@ -7,9 +7,10 @@ require("dotenv").config();
 const isDevServer = process.env.NODE_ENV !== "production";
 
 // Environment variable overrides
+// Disable visual edits to avoid babel plugin stack overflow
 const config = {
   enableHealthCheck: process.env.ENABLE_HEALTH_CHECK === "true",
-  enableVisualEdits: isDevServer, // Only enable during dev server
+  enableVisualEdits: false, // Disabled due to babel plugin compatibility issue
 };
 
 // Conditionally load visual edits modules only in dev mode
