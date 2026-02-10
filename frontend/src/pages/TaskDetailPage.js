@@ -195,6 +195,24 @@ export default function TaskDetailPage() {
     }
   };
 
+  const handleProofUpload = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      await api.post(`/tasks/${taskId}/proof`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      toast.success('Proof photo uploaded');
+      fetchTaskData();
+    } catch (error) {
+      toast.error('Failed to upload proof photo');
+    }
+  };
+
   const handleAddComment = async () => {
     if (!newComment.trim()) return;
     setSubmitting(true);
