@@ -17,9 +17,13 @@ import {
   Upload,
   Pencil,
   Trash2,
-  MoreVertical
+  MoreVertical,
+  Timer,
+  AlertCircle,
+  Camera,
+  Repeat
 } from 'lucide-react';
-import { format } from 'date-fns';
+import { format, formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 import Layout from '../components/Layout';
