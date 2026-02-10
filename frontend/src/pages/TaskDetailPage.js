@@ -370,9 +370,9 @@ export default function TaskDetailPage() {
         </div>
 
         {/* Task Details Card */}
-        <Card className="bg-white rounded-2xl border border-zinc-100 shadow-sm">
+        <Card className={`rounded-2xl border shadow-sm ${isOverdue || isNotCompleted ? 'bg-red-50 border-red-200' : 'bg-white border-zinc-100'}`}>
           <CardContent className="p-5 space-y-4">
-            <p className="text-zinc-600" data-testid="task-description">
+            <p className={`${isOverdue || isNotCompleted ? 'text-red-700' : 'text-zinc-600'}`} data-testid="task-description">
               {task.description || 'No description'}
             </p>
 
@@ -387,15 +387,52 @@ export default function TaskDetailPage() {
                 <span className="text-zinc-500">Assigned to:</span>
                 <span className="font-medium text-zinc-900">{task.assigned_to_name || 'Unassigned'}</span>
               </div>
-              {task.due_date && (
+              
+              {/* Time Interval */}
+              <div className="flex items-center gap-2 text-sm col-span-2">
+                <Timer className="h-4 w-4 text-zinc-400" />
+                <span className="text-zinc-500">Time Allowed:</span>
+                <span className="font-medium text-zinc-900">{task.time_interval} {task.time_unit?.toLowerCase() || 'minutes'}</span>
+              </div>
+              
+              {/* Allocated Date/Time */}
+              {task.allocated_datetime && (
                 <div className="flex items-center gap-2 text-sm col-span-2">
                   <Calendar className="h-4 w-4 text-zinc-400" />
-                  <span className="text-zinc-500">Due:</span>
+                  <span className="text-zinc-500">Allocated:</span>
                   <span className="font-medium text-zinc-900">
-                    {format(new Date(task.due_date), 'PPp')}
+                    {format(new Date(task.allocated_datetime), 'PPp')}
                   </span>
                 </div>
               )}
+              
+              {/* Deadline */}
+              {task.deadline && (
+                <div className={`flex items-center gap-2 text-sm col-span-2 ${isOverdue || isNotCompleted ? 'text-red-600' : ''}`}>
+                  <AlertCircle className={`h-4 w-4 ${isOverdue || isNotCompleted ? 'text-red-500' : 'text-zinc-400'}`} />
+                  <span className={isOverdue || isNotCompleted ? 'text-red-600' : 'text-zinc-500'}>Deadline:</span>
+                  <span className={`font-medium ${isOverdue || isNotCompleted ? 'text-red-700' : 'text-zinc-900'}`}>
+                    {format(new Date(task.deadline), 'PPp')}
+                    {!isOverdue && !isNotCompleted && task.status !== 'COMPLETED' && task.status !== 'VERIFIED' && (
+                      <span className="text-zinc-500 ml-2">
+                        ({formatDistanceToNow(new Date(task.deadline), { addSuffix: true })})
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+              
+              {/* Start Time (when task was started) */}
+              {task.start_time && (
+                <div className="flex items-center gap-2 text-sm col-span-2">
+                  <Play className="h-4 w-4 text-zinc-400" />
+                  <span className="text-zinc-500">Started:</span>
+                  <span className="font-medium text-zinc-900">
+                    {format(new Date(task.start_time), 'PPp')}
+                  </span>
+                </div>
+              )}
+              
               <div className="flex items-center gap-2 text-sm col-span-2">
                 <Clock className="h-4 w-4 text-zinc-400" />
                 <span className="text-zinc-500">Created:</span>
