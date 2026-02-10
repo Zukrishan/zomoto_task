@@ -4,7 +4,7 @@ from datetime import datetime
 import json
 
 class ZomotoTasksAPITester:
-    def __init__(self, base_url="https://task-tracker-735.preview.emergentagent.com"):
+    def __init__(self, base_url="https://resto-tasks-1.preview.emergentagent.com"):
         self.base_url = base_url
         self.tokens = {}
         self.users = {}
