@@ -45,10 +45,10 @@ import EditTaskModal from '../components/EditTaskModal';
 import ImageViewer from '../components/ImageViewer';
 
 const STATUS_CONFIG = {
-  CREATED: { label: 'Created', color: 'bg-zinc-100 text-zinc-700' },
-  ASSIGNED: { label: 'Assigned', color: 'bg-blue-100 text-blue-700' },
+  PENDING: { label: 'Pending', color: 'bg-blue-100 text-blue-700' },
   IN_PROGRESS: { label: 'In Progress', color: 'bg-amber-100 text-amber-700' },
   COMPLETED: { label: 'Completed', color: 'bg-emerald-100 text-emerald-700' },
+  NOT_COMPLETED: { label: 'Not Completed', color: 'bg-red-100 text-red-700' },
   VERIFIED: { label: 'Verified', color: 'bg-purple-100 text-purple-700' },
 };
 

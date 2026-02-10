@@ -19,10 +19,10 @@ import CreateTaskModal from '../components/CreateTaskModal';
 
 const STATUS_OPTIONS = [
   { value: 'ALL', label: 'All Status' },
-  { value: 'CREATED', label: 'Created' },
-  { value: 'ASSIGNED', label: 'Assigned' },
+  { value: 'PENDING', label: 'Pending' },
   { value: 'IN_PROGRESS', label: 'In Progress' },
   { value: 'COMPLETED', label: 'Completed' },
+  { value: 'NOT_COMPLETED', label: 'Not Completed' },
   { value: 'VERIFIED', label: 'Verified' },
 ];
 
