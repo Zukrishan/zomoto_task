@@ -185,7 +185,9 @@ export default function TasksPage() {
               <TaskCard 
                 key={task.id} 
                 task={task} 
-                onClick={() => navigate(`/tasks/${task.id}`)} 
+                onClick={() => navigate(`/tasks/${task.id}`)}
+                onTaskUpdate={fetchTasks}
+                currentUser={user}
               />
             ))}
           </div>
