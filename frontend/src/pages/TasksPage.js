@@ -48,6 +48,7 @@ export default function TasksPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isOwner, isManager, user } = useAuth();
+  const { isConnected } = useWebSocket();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateTask, setShowCreateTask] = useState(false);
@@ -65,19 +66,7 @@ export default function TasksPage() {
     priority: 'ALL',
   });
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => {
-    fetchTasks();
-  }, [filters.status, filters.category, filters.priority]);
-
-  // Clear selection when exiting select mode
-  useEffect(() => {
-    if (!selectMode) {
-      setSelectedTasks(new Set());
-    }
-  }, [selectMode]);
-
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
@@ -88,6 +77,96 @@ export default function TasksPage() {
       const response = await api.get(`/tasks?${params.toString()}`);
       setTasks(response.data);
     } catch (error) {
+      console.error('Failed to fetch tasks:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [filters.status, filters.category, filters.priority]);
+
+  // Fetch tasks on filter change
+  useEffect(() => {
+    fetchTasks();
+  }, [fetchTasks]);
+
+  // Clear selection when exiting select mode
+  useEffect(() => {
+    if (!selectMode) {
+      setSelectedTasks(new Set());
+    }
+  }, [selectMode]);
+
+  // WebSocket event handlers for real-time updates
+  const handleTaskCreated = useCallback((message) => {
+    const newTask = message.data;
+    // Check if this task matches current filters
+    const matchesFilters = 
+      (filters.status === 'ALL' || newTask.status === filters.status) &&
+      (filters.category === 'ALL' || newTask.category === filters.category) &&
+      (filters.priority === 'ALL' || newTask.priority === filters.priority);
+    
+    // For staff, also check if assigned to them
+    if (user?.role === 'STAFF' && newTask.assigned_to !== user.id) {
+      return;
+    }
+    
+    if (matchesFilters) {
+      setTasks(prev => [newTask, ...prev]);
+      toast.info(`New task: ${newTask.title}`, { duration: 3000 });
+    }
+  }, [filters, user]);
+
+  const handleTaskUpdated = useCallback((message) => {
+    const updatedTask = message.data;
+    setTasks(prev => {
+      const index = prev.findIndex(t => t.id === updatedTask.id);
+      if (index === -1) {
+        // Task not in list, might need to add it if it matches filters now
+        return prev;
+      }
+      
+      // Check if updated task still matches filters
+      const matchesFilters = 
+        (filters.status === 'ALL' || updatedTask.status === filters.status) &&
+        (filters.category === 'ALL' || updatedTask.category === filters.category) &&
+        (filters.priority === 'ALL' || updatedTask.priority === filters.priority);
+      
+      if (!matchesFilters) {
+        // Remove from list if doesn't match anymore
+        return prev.filter(t => t.id !== updatedTask.id);
+      }
+      
+      // Update the task in place
+      const newTasks = [...prev];
+      newTasks[index] = updatedTask;
+      return newTasks;
+    });
+  }, [filters]);
+
+  const handleTaskDeleted = useCallback((message) => {
+    const { id } = message.data;
+    setTasks(prev => prev.filter(t => t.id !== id));
+    setSelectedTasks(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(id);
+      return newSet;
+    });
+  }, []);
+
+  const handleTasksDeleted = useCallback((message) => {
+    const { ids } = message.data;
+    setTasks(prev => prev.filter(t => !ids.includes(t.id)));
+    setSelectedTasks(prev => {
+      const newSet = new Set(prev);
+      ids.forEach(id => newSet.delete(id));
+      return newSet;
+    });
+  }, []);
+
+  // Subscribe to WebSocket events
+  useWebSocketEvent('task_created', handleTaskCreated);
+  useWebSocketEvent('task_update', handleTaskUpdated);
+  useWebSocketEvent('task_deleted', handleTaskDeleted);
+  useWebSocketEvent('tasks_deleted', handleTasksDeleted);
       console.error('Failed to fetch tasks:', error);
     } finally {
       setLoading(false);
