@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Filter, Search, ClipboardList, Trash2, X, CheckSquare, Square } from 'lucide-react';
+import { Plus, Filter, Search, ClipboardList, Trash2, X, CheckSquare, Square, Wifi, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
+import { useWebSocket, useWebSocketEvent } from '../context/WebSocketContext';
 import api from '../lib/api';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
