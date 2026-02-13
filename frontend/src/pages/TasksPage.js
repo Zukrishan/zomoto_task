@@ -44,7 +44,7 @@ const PRIORITY_OPTIONS = [
 export default function TasksPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { isOwner, isManager } = useAuth();
+  const { isOwner, isManager, user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateTask, setShowCreateTask] = useState(false);
