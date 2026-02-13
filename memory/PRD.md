@@ -160,9 +160,9 @@ All endpoints prefixed with `/api`
 - ✅ Task edit functionality fix
 
 ### P1 (High Priority) - Next
-- [ ] Multi-select and "Select All" soft deletion for tasks
-- [ ] Recurring task logic (schedule-based, daily/monthly)
+- [ ] Multi-select and "Select All" for bulk task deletion
 - [ ] WebSocket real-time updates on frontend
+- [ ] SMS notifications via notify.lk on task events
 
 ### P2 (Medium Priority)
 - [ ] SMS notifications via notify.lk on task events
