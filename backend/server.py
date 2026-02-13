@@ -220,6 +220,9 @@ class TaskResponse(BaseModel):
     created_at: str
     updated_at: str
     is_deleted: bool
+    # Recurring task fields
+    recurrence_type: Optional[str] = None
+    recurrence_intervals: Optional[List[dict]] = None
 
 class CommentCreate(BaseModel):
     content: str
