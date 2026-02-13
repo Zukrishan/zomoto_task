@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { 
@@ -21,10 +21,12 @@ import {
   Timer,
   AlertCircle,
   Camera,
-  Repeat
+  Repeat,
+  Wifi
 } from 'lucide-react';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
+import { useWebSocket, useWebSocketEvent } from '../context/WebSocketContext';
 import api from '../lib/api';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
