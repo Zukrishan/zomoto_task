@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ClipboardList, 
@@ -8,9 +8,11 @@ import {
   Users,
   AlertCircle,
   Plus,
-  ArrowRight
+  ArrowRight,
+  Wifi
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { useWebSocket, useWebSocketEvent } from '../context/WebSocketContext';
 import api from '../lib/api';
 import Layout from '../components/Layout';
 import { Card, CardContent } from '../components/ui/card';
@@ -21,16 +23,13 @@ import CreateTaskModal from '../components/CreateTaskModal';
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { user, isOwner, isManager, isStaff } = useAuth();
+  const { isConnected } = useWebSocket();
   const [stats, setStats] = useState(null);
   const [recentTasks, setRecentTasks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateTask, setShowCreateTask] = useState(false);
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       const [statsRes, tasksRes] = await Promise.all([
         api.get('/dashboard/stats'),
@@ -43,7 +42,23 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // WebSocket handlers for real-time dashboard updates
+  const handleTaskEvent = useCallback(() => {
+    // Refresh dashboard data when any task event occurs
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  // Subscribe to all task events
+  useWebSocketEvent('task_created', handleTaskEvent);
+  useWebSocketEvent('task_update', handleTaskEvent);
+  useWebSocketEvent('task_deleted', handleTaskEvent);
+  useWebSocketEvent('tasks_deleted', handleTaskEvent);
 
   const StatCard = ({ icon: Icon, label, value, color, onClick }) => (
     <Card 
