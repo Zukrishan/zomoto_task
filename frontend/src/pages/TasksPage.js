@@ -350,6 +350,8 @@ export default function TasksPage() {
                     onClick={selectMode ? () => toggleTaskSelection(task.id) : () => navigate(`/tasks/${task.id}`)}
                     onTaskUpdate={fetchTasks}
                     currentUser={user}
+                    onLongPress={handleLongPress}
+                    selectMode={selectMode}
                   />
                 </div>
               </div>
