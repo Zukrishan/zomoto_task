@@ -15,17 +15,19 @@ export const useAuth = () => {
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const initAuth = async () => {
-      const token = Cookies.get('zomoto_token');
-      if (token) {
+      const storedToken = Cookies.get('zomoto_token');
+      if (storedToken) {
         try {
-          const decoded = jwtDecode(token);
+          const decoded = jwtDecode(storedToken);
           if (decoded.exp * 1000 > Date.now()) {
             const response = await api.get('/auth/me');
             setUser(response.data);
+            setToken(storedToken);
           } else {
             Cookies.remove('zomoto_token');
           }
@@ -46,6 +48,7 @@ export const AuthProvider = ({ children }) => {
     
     Cookies.set('zomoto_token', access_token, { expires: 1 });
     setUser(userData);
+    setToken(access_token);
     
     return userData;
   };
