@@ -166,26 +166,6 @@ export default function TaskDetailPage() {
   useWebSocketEvent('task_update', handleTaskUpdate);
   useWebSocketEvent('comment_added', handleCommentAdded);
   useWebSocketEvent('task_deleted', handleTaskDeleted);
-      setTask(taskRes.data);
-      setComments(commentsRes.data);
-      setActivityLog(activityRes.data);
-      setAttachments(attachmentsRes.data);
-    } catch (error) {
-      toast.error('Failed to load task');
-      navigate('/tasks');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchStaffList = async () => {
-    try {
-      const response = await api.get('/users/staff');
-      setStaffList(response.data);
-    } catch (error) {
-      console.error('Failed to fetch staff:', error);
-    }
-  };
 
   const handleStatusUpdate = async (newStatus) => {
     setUpdating(true);
