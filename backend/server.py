@@ -1166,6 +1166,11 @@ async def websocket_endpoint(websocket: WebSocket, token: str):
     except JWTError:
         await websocket.close(code=4001)
 
+# Also expose WebSocket on /api/ws path for ingress routing
+@app.websocket("/api/ws/{token}")
+async def websocket_endpoint_api(websocket: WebSocket, token: str):
+    await websocket_endpoint(websocket, token)
+
 # ============== SEED DATA ==============
 
 @api_router.post("/seed")
