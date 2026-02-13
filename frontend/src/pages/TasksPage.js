@@ -243,7 +243,23 @@ export default function TasksPage() {
       <div className="space-y-4 pb-24 md:pb-6" data-testid="tasks-page">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-zinc-900">Tasks</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-bold text-zinc-900">Tasks</h1>
+            {/* Live connection indicator */}
+            <div 
+              className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+                isConnected ? 'bg-emerald-100 text-emerald-700' : 'bg-zinc-100 text-zinc-500'
+              }`}
+              title={isConnected ? 'Live updates active' : 'Connecting...'}
+            >
+              {isConnected ? (
+                <Wifi className="h-3 w-3" />
+              ) : (
+                <WifiOff className="h-3 w-3" />
+              )}
+              <span className="hidden sm:inline">{isConnected ? 'Live' : 'Offline'}</span>
+            </div>
+          </div>
           <div className="flex items-center gap-2">
             {/* Select Mode Toggle - Hidden on mobile, shown on desktop (Owner/Manager only) */}
             {(isOwner || isManager) && !selectMode && (
