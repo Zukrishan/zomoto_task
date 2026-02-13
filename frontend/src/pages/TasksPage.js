@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { Plus, Filter, Search, ClipboardList } from 'lucide-react';
+import { Plus, Filter, Search, ClipboardList, Trash2, X, CheckSquare, Square } from 'lucide-react';
+import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import api from '../lib/api';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Checkbox } from '../components/ui/checkbox';
 import { 
   Select,
   SelectContent,
@@ -51,6 +53,11 @@ export default function TasksPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Multi-select state
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedTasks, setSelectedTasks] = useState(new Set());
+  const [deleting, setDeleting] = useState(false);
+  
   const [filters, setFilters] = useState({
     status: searchParams.get('status') || 'ALL',
     category: 'ALL',
@@ -61,6 +68,13 @@ export default function TasksPage() {
   useEffect(() => {
     fetchTasks();
   }, [filters.status, filters.category, filters.priority]);
+
+  // Clear selection when exiting select mode
+  useEffect(() => {
+    if (!selectMode) {
+      setSelectedTasks(new Set());
+    }
+  }, [selectMode]);
 
   const fetchTasks = async () => {
     setLoading(true);
@@ -96,23 +110,140 @@ export default function TasksPage() {
     }
   };
 
+  // Multi-select handlers
+  const toggleTaskSelection = (taskId) => {
+    const newSelected = new Set(selectedTasks);
+    if (newSelected.has(taskId)) {
+      newSelected.delete(taskId);
+    } else {
+      newSelected.add(taskId);
+    }
+    setSelectedTasks(newSelected);
+  };
+
+  const selectAllTasks = () => {
+    if (selectedTasks.size === filteredTasks.length) {
+      // Deselect all
+      setSelectedTasks(new Set());
+    } else {
+      // Select all
+      setSelectedTasks(new Set(filteredTasks.map(t => t.id)));
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedTasks.size === 0) return;
+    
+    const confirmMessage = `Are you sure you want to delete ${selectedTasks.size} task${selectedTasks.size > 1 ? 's' : ''}? This action cannot be undone.`;
+    if (!window.confirm(confirmMessage)) return;
+    
+    setDeleting(true);
+    try {
+      await api.post('/tasks/bulk-delete', {
+        task_ids: Array.from(selectedTasks)
+      });
+      toast.success(`${selectedTasks.size} task${selectedTasks.size > 1 ? 's' : ''} deleted`);
+      setSelectedTasks(new Set());
+      setSelectMode(false);
+      fetchTasks();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete tasks');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const isAllSelected = filteredTasks.length > 0 && selectedTasks.size === filteredTasks.length;
+  const isSomeSelected = selectedTasks.size > 0 && selectedTasks.size < filteredTasks.length;
+
   return (
     <Layout>
       <div className="space-y-4 pb-24 md:pb-6" data-testid="tasks-page">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-zinc-900">Tasks</h1>
-          {(isOwner || isManager) && (
-            <Button 
-              onClick={() => setShowCreateTask(true)}
-              className="h-10 px-4 bg-[#E23744] hover:bg-[#C42B37] text-white rounded-full shadow-md"
-              data-testid="create-task-btn"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              New Task
-            </Button>
-          )}
+          <div className="flex items-center gap-2">
+            {/* Select Mode Toggle (Owner/Manager only) */}
+            {(isOwner || isManager) && !selectMode && (
+              <Button
+                variant="outline"
+                onClick={() => setSelectMode(true)}
+                className="h-10 px-4 rounded-full border-zinc-200"
+                data-testid="enter-select-mode"
+              >
+                <CheckSquare className="h-4 w-4 mr-2" />
+                Select
+              </Button>
+            )}
+            
+            {(isOwner || isManager) && !selectMode && (
+              <Button 
+                onClick={() => setShowCreateTask(true)}
+                className="h-10 px-4 bg-[#E23744] hover:bg-[#C42B37] text-white rounded-full shadow-md"
+                data-testid="create-task-btn"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                New Task
+              </Button>
+            )}
+          </div>
         </div>
+
+        {/* Selection Bar - Shows when in select mode */}
+        {selectMode && (
+          <div className="flex items-center justify-between bg-zinc-100 rounded-xl p-3 animate-slide-up" data-testid="selection-bar">
+            <div className="flex items-center gap-3">
+              {/* Select All Checkbox */}
+              <button
+                onClick={selectAllTasks}
+                className="flex items-center gap-2 text-sm font-medium text-zinc-700 hover:text-zinc-900"
+                data-testid="select-all-btn"
+              >
+                {isAllSelected ? (
+                  <CheckSquare className="h-5 w-5 text-[#E23744]" />
+                ) : isSomeSelected ? (
+                  <div className="h-5 w-5 border-2 border-[#E23744] rounded bg-[#E23744]/20 flex items-center justify-center">
+                    <div className="w-2 h-0.5 bg-[#E23744]" />
+                  </div>
+                ) : (
+                  <Square className="h-5 w-5 text-zinc-400" />
+                )}
+                {isAllSelected ? 'Deselect All' : 'Select All'}
+              </button>
+              
+              <span className="text-sm text-zinc-500">
+                {selectedTasks.size} of {filteredTasks.length} selected
+              </span>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {/* Delete Button */}
+              <Button
+                onClick={handleBulkDelete}
+                disabled={selectedTasks.size === 0 || deleting}
+                className="h-9 px-4 bg-red-500 hover:bg-red-600 text-white rounded-full disabled:opacity-50"
+                data-testid="bulk-delete-btn"
+              >
+                {deleting ? (
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                Delete ({selectedTasks.size})
+              </Button>
+              
+              {/* Cancel Button */}
+              <Button
+                variant="ghost"
+                onClick={() => setSelectMode(false)}
+                className="h-9 px-3 rounded-full"
+                data-testid="cancel-select-btn"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Search Bar */}
         <div className="flex gap-2">
@@ -182,13 +313,32 @@ export default function TasksPage() {
         ) : filteredTasks.length > 0 ? (
           <div className="space-y-3" data-testid="tasks-list">
             {filteredTasks.map((task) => (
-              <TaskCard 
-                key={task.id} 
-                task={task} 
-                onClick={() => navigate(`/tasks/${task.id}`)}
-                onTaskUpdate={fetchTasks}
-                currentUser={user}
-              />
+              <div key={task.id} className="flex items-start gap-3">
+                {/* Checkbox for selection */}
+                {selectMode && (
+                  <div 
+                    className="pt-4 cursor-pointer"
+                    onClick={() => toggleTaskSelection(task.id)}
+                    data-testid={`task-checkbox-${task.id}`}
+                  >
+                    {selectedTasks.has(task.id) ? (
+                      <CheckSquare className="h-6 w-6 text-[#E23744]" />
+                    ) : (
+                      <Square className="h-6 w-6 text-zinc-300 hover:text-zinc-400" />
+                    )}
+                  </div>
+                )}
+                
+                {/* Task Card */}
+                <div className={`flex-1 ${selectMode ? 'pointer-events-none' : ''}`}>
+                  <TaskCard 
+                    task={task} 
+                    onClick={selectMode ? () => toggleTaskSelection(task.id) : () => navigate(`/tasks/${task.id}`)}
+                    onTaskUpdate={fetchTasks}
+                    currentUser={user}
+                  />
+                </div>
+              </div>
             ))}
           </div>
         ) : (
