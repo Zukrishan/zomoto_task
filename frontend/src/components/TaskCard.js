@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useCallback } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { Clock, User, AlertCircle, Timer, Repeat, Play, CheckCircle2, Camera, ShieldCheck, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -21,9 +21,14 @@ const PRIORITY_CONFIG = {
   LOW: { color: 'border-l-green-500' },
 };
 
-export default function TaskCard({ task, onClick, onTaskUpdate, currentUser }) {
+// Long press duration in milliseconds
+const LONG_PRESS_DURATION = 500;
+
+export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onLongPress, selectMode }) {
   const [loading, setLoading] = useState(false);
   const [uploadingProof, setUploadingProof] = useState(false);
+  const longPressTimer = useRef(null);
+  const isLongPress = useRef(false);
   
   // Use the is_overdue flag from backend or check deadline
   const isOverdue = task.is_overdue || (task.deadline && new Date(task.deadline) < new Date() && 
@@ -37,6 +42,7 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser }) {
   const isOwner = currentUser?.role === 'OWNER';
   const isManager = currentUser?.role === 'MANAGER';
   const isAssignedToMe = task.assigned_to === currentUser?.id;
+  const canSelect = isOwner || isManager;
   
   // Action visibility
   const canStart = task.status === 'PENDING' && isAssignedToMe;
@@ -44,6 +50,46 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser }) {
   const canComplete = task.status === 'IN_PROGRESS' && isAssignedToMe && task.proof_photos?.length > 0;
   const canVerify = task.status === 'COMPLETED' && (isOwner || isManager);
   const hasProofPhotos = task.proof_photos && task.proof_photos.length > 0;
+
+  // Long press handlers for touch devices
+  const handleTouchStart = useCallback((e) => {
+    if (!canSelect || selectMode) return;
+    isLongPress.current = false;
+    longPressTimer.current = setTimeout(() => {
+      isLongPress.current = true;
+      // Vibrate on mobile if supported
+      if (navigator.vibrate) {
+        navigator.vibrate(50);
+      }
+      onLongPress?.(task.id);
+    }, LONG_PRESS_DURATION);
+  }, [canSelect, selectMode, onLongPress, task.id]);
+
+  const handleTouchEnd = useCallback((e) => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+    }
+    // If it was a long press, prevent the click
+    if (isLongPress.current) {
+      e.preventDefault();
+    }
+  }, []);
+
+  const handleTouchMove = useCallback(() => {
+    // Cancel long press if user moves finger
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+    }
+  }, []);
+
+  const handleClick = (e) => {
+    // Don't navigate if it was a long press
+    if (isLongPress.current) {
+      isLongPress.current = false;
+      return;
+    }
+    onClick?.();
+  };
 
   // Format time remaining or overdue
   const getTimeDisplay = () => {
