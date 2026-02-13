@@ -176,7 +176,13 @@ export default function DashboardPage() {
           {recentTasks.length > 0 ? (
             <div className="space-y-3">
               {recentTasks.map((task) => (
-                <TaskCard key={task.id} task={task} onClick={() => navigate(`/tasks/${task.id}`)} />
+                <TaskCard 
+                  key={task.id} 
+                  task={task} 
+                  onClick={() => navigate(`/tasks/${task.id}`)}
+                  onTaskUpdate={fetchDashboardData}
+                  currentUser={user}
+                />
               ))}
             </div>
           ) : (
