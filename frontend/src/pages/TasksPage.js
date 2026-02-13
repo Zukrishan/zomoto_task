@@ -156,6 +156,13 @@ export default function TasksPage() {
   const isAllSelected = filteredTasks.length > 0 && selectedTasks.size === filteredTasks.length;
   const isSomeSelected = selectedTasks.size > 0 && selectedTasks.size < filteredTasks.length;
 
+  // Long press handler - enters select mode and selects the task
+  const handleLongPress = (taskId) => {
+    setSelectMode(true);
+    setSelectedTasks(new Set([taskId]));
+    toast.success('Selection mode activated', { duration: 1500 });
+  };
+
   return (
     <Layout>
       <div className="space-y-4 pb-24 md:pb-6" data-testid="tasks-page">
@@ -163,12 +170,12 @@ export default function TasksPage() {
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-zinc-900">Tasks</h1>
           <div className="flex items-center gap-2">
-            {/* Select Mode Toggle (Owner/Manager only) */}
+            {/* Select Mode Toggle - Hidden on mobile, shown on desktop (Owner/Manager only) */}
             {(isOwner || isManager) && !selectMode && (
               <Button
                 variant="outline"
                 onClick={() => setSelectMode(true)}
-                className="h-10 px-4 rounded-full border-zinc-200"
+                className="h-10 px-4 rounded-full border-zinc-200 hidden md:flex"
                 data-testid="enter-select-mode"
               >
                 <CheckSquare className="h-4 w-4 mr-2" />
@@ -188,6 +195,13 @@ export default function TasksPage() {
             )}
           </div>
         </div>
+
+        {/* Long press hint for mobile - shown only when not in select mode */}
+        {(isOwner || isManager) && !selectMode && (
+          <p className="text-xs text-zinc-400 text-center md:hidden">
+            Long press a task to select and delete
+          </p>
+        )}
 
         {/* Selection Bar - Shows when in select mode */}
         {selectMode && (
