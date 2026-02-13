@@ -56,13 +56,16 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     Cookies.remove('zomoto_token');
     setUser(null);
+    setToken(null);
   };
 
   const value = {
     user,
+    token,
     login,
     logout,
     loading,
+    isAuthenticated: !!user && !!token,
     isOwner: user?.role === 'OWNER',
     isManager: user?.role === 'MANAGER',
     isStaff: user?.role === 'STAFF',
