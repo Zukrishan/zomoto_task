@@ -167,11 +167,6 @@ export default function TasksPage() {
   useWebSocketEvent('task_update', handleTaskUpdated);
   useWebSocketEvent('task_deleted', handleTaskDeleted);
   useWebSocketEvent('tasks_deleted', handleTasksDeleted);
-      console.error('Failed to fetch tasks:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const filteredTasks = tasks.filter(task => 
     task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
