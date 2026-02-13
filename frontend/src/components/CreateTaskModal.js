@@ -3,8 +3,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Loader2, Plus, Calendar as CalendarIcon, X, Clock, Repeat } from 'lucide-react';
-import { format, addHours, addMinutes } from 'date-fns';
+import { Loader2, Plus, Calendar as CalendarIcon, X, Clock, Repeat, Trash2 } from 'lucide-react';
+import { format, addHours, addMinutes, addMonths } from 'date-fns';
 import api from '../lib/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -60,6 +60,11 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
   const [taskType, setTaskType] = useState('INSTANT');
   const [timeInterval, setTimeInterval] = useState(30);
   const [timeUnit, setTimeUnit] = useState('MINUTES');
+  
+  // Recurring task state
+  const [recurrenceIntervals, setRecurrenceIntervals] = useState([
+    { start_day: 1, end_day: 5 }
+  ]);
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
     resolver: zodResolver(taskSchema),
@@ -133,7 +138,53 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     setShowTemplateList(false);
   };
 
+  // Recurring interval management
+  const addInterval = () => {
+    if (recurrenceIntervals.length >= 5) {
+      toast.error('Maximum 5 intervals allowed');
+      return;
+    }
+    setRecurrenceIntervals([...recurrenceIntervals, { start_day: 1, end_day: 5 }]);
+  };
+
+  const removeInterval = (index) => {
+    if (recurrenceIntervals.length <= 1) {
+      toast.error('At least one interval is required');
+      return;
+    }
+    setRecurrenceIntervals(recurrenceIntervals.filter((_, i) => i !== index));
+  };
+
+  const updateInterval = (index, field, value) => {
+    const newIntervals = [...recurrenceIntervals];
+    newIntervals[index] = { ...newIntervals[index], [field]: parseInt(value) || 1 };
+    setRecurrenceIntervals(newIntervals);
+  };
+
+  const validateIntervals = () => {
+    for (const interval of recurrenceIntervals) {
+      if (interval.start_day < 1 || interval.start_day > 31) {
+        toast.error('Start day must be between 1 and 31');
+        return false;
+      }
+      if (interval.end_day < 1 || interval.end_day > 31) {
+        toast.error('End day must be between 1 and 31');
+        return false;
+      }
+      if (interval.start_day > interval.end_day) {
+        toast.error('Start day cannot be greater than end day');
+        return false;
+      }
+    }
+    return true;
+  };
+
   const onSubmit = async (data) => {
+    // Validate recurring intervals if task type is RECURRING
+    if (taskType === 'RECURRING' && !validateIntervals()) {
+      return;
+    }
+    
     setLoading(true);
     try {
       // Combine date and time for allocated_datetime
@@ -152,6 +203,13 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
         allocated_datetime: allocatedDateTime.toISOString(),
         assigned_to: selectedStaff || null,
       };
+      
+      // Add recurring fields if task type is RECURRING
+      if (taskType === 'RECURRING') {
+        taskData.recurrence_type = 'MONTHLY';
+        taskData.recurrence_intervals = recurrenceIntervals;
+        taskData.recurrence_end_date = addMonths(new Date(), 1).toISOString();
+      }
       
       await api.post('/tasks', taskData);
       toast.success('Task created successfully');
@@ -174,6 +232,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     setTaskType('INSTANT');
     setTimeInterval(30);
     setTimeUnit('MINUTES');
+    setRecurrenceIntervals([{ start_day: 1, end_day: 5 }]);
     setShowTemplateList(false);
     onClose();
   };
@@ -215,7 +274,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="sticky top-0 bg-white px-6 py-4 border-b border-zinc-100 flex items-center justify-between">
+        <div className="sticky top-0 bg-white px-6 py-4 border-b border-zinc-100 flex items-center justify-between z-10">
           <h2 className="text-lg font-semibold text-zinc-900">Create New Task</h2>
           <button 
             onClick={handleClose}
@@ -247,6 +306,84 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
               </SelectContent>
             </Select>
           </div>
+
+          {/* Recurring Task Schedule */}
+          {taskType === 'RECURRING' && (
+            <div className="space-y-3 p-4 bg-blue-50 rounded-xl border border-blue-200">
+              <div className="flex items-center justify-between">
+                <Label className="text-blue-800 flex items-center gap-2">
+                  <Repeat className="h-4 w-4" />
+                  Monthly Schedule (Day Intervals)
+                </Label>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={addInterval}
+                  className="h-8 text-blue-600 border-blue-300 hover:bg-blue-100"
+                  data-testid="add-interval-btn"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add
+                </Button>
+              </div>
+              
+              <p className="text-xs text-blue-600">
+                Task will be visible to assigned staff during these day intervals each month
+              </p>
+              
+              <div className="space-y-2">
+                {recurrenceIntervals.map((interval, index) => (
+                  <div key={index} className="flex items-center gap-2 bg-white p-2 rounded-lg">
+                    <span className="text-sm text-zinc-500 w-16">Day</span>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={interval.start_day}
+                      onChange={(e) => updateInterval(index, 'start_day', e.target.value)}
+                      className="w-16 h-9 text-center rounded-lg"
+                      data-testid={`interval-${index}-start`}
+                    />
+                    <span className="text-zinc-400">to</span>
+                    <Input
+                      type="number"
+                      min="1"
+                      max="31"
+                      value={interval.end_day}
+                      onChange={(e) => updateInterval(index, 'end_day', e.target.value)}
+                      className="w-16 h-9 text-center rounded-lg"
+                      data-testid={`interval-${index}-end`}
+                    />
+                    {recurrenceIntervals.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => removeInterval(index)}
+                        className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                        data-testid={`remove-interval-${index}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+              
+              {/* Schedule Preview */}
+              <div className="text-xs text-blue-700 bg-blue-100 p-2 rounded-lg">
+                <strong>Preview:</strong> Task visible on days{' '}
+                {recurrenceIntervals.map((interval, i) => (
+                  <span key={i}>
+                    {interval.start_day}-{interval.end_day}
+                    {i < recurrenceIntervals.length - 1 ? ', ' : ''}
+                  </span>
+                ))}
+                {' '}of each month
+              </div>
+            </div>
+          )}
 
           {/* Task Title with Autocomplete */}
           <div className="space-y-2">
@@ -381,55 +518,76 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
             </div>
           </div>
 
-          {/* Allocated Date & Time */}
-          <div className="space-y-2">
-            <Label>Start Date & Time</Label>
-            <div className="grid grid-cols-2 gap-2">
-              <Popover>
-                <PopoverTrigger asChild>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full justify-start text-left font-normal rounded-xl h-12"
-                    data-testid="task-date-btn"
-                  >
-                    <CalendarIcon className="mr-2 h-4 w-4" />
-                    {format(selectedDate, 'MMM d, yyyy')}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={(date) => date && setSelectedDate(date)}
-                    initialFocus
+          {/* Allocated Date & Time - Only for Instant tasks */}
+          {taskType === 'INSTANT' && (
+            <>
+              <div className="space-y-2">
+                <Label>Start Date & Time</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="w-full justify-start text-left font-normal rounded-xl h-12"
+                        data-testid="task-date-btn"
+                      >
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {format(selectedDate, 'MMM d, yyyy')}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={selectedDate}
+                        onSelect={(date) => date && setSelectedDate(date)}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <Input
+                    type="time"
+                    value={selectedTime}
+                    onChange={(e) => setSelectedTime(e.target.value)}
+                    className="rounded-xl h-12"
+                    data-testid="task-time-input"
                   />
-                </PopoverContent>
-              </Popover>
+                </div>
+              </div>
+
+              {/* Deadline Preview */}
+              <div className="bg-zinc-50 rounded-xl p-3 text-sm">
+                <div className="flex items-center gap-2 text-zinc-600">
+                  <Clock className="h-4 w-4" />
+                  <span>Deadline will be:</span>
+                  <span className="font-medium text-zinc-900">
+                    {format(getDeadlinePreview(), 'MMM d, yyyy h:mm a')}
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* For recurring tasks, show daily time */}
+          {taskType === 'RECURRING' && (
+            <div className="space-y-2">
+              <Label>Daily Start Time</Label>
               <Input
                 type="time"
                 value={selectedTime}
                 onChange={(e) => setSelectedTime(e.target.value)}
                 className="rounded-xl h-12"
-                data-testid="task-time-input"
+                data-testid="recurring-time-input"
               />
+              <p className="text-xs text-zinc-500">
+                Task will appear at this time each scheduled day with {timeInterval} {timeUnit.toLowerCase()} to complete
+              </p>
             </div>
-          </div>
-
-          {/* Deadline Preview */}
-          <div className="bg-zinc-50 rounded-xl p-3 text-sm">
-            <div className="flex items-center gap-2 text-zinc-600">
-              <Clock className="h-4 w-4" />
-              <span>Deadline will be:</span>
-              <span className="font-medium text-zinc-900">
-                {format(getDeadlinePreview(), 'MMM d, yyyy h:mm a')}
-              </span>
-            </div>
-          </div>
+          )}
 
           {/* Assign To */}
           <div className="space-y-2">
-            <Label>Assign To (Optional)</Label>
+            <Label>Assign To {taskType === 'RECURRING' ? '(Required)' : '(Optional)'}</Label>
             <Select value={selectedStaff} onValueChange={setSelectedStaff}>
               <SelectTrigger className="rounded-xl" data-testid="task-assign-select">
                 <SelectValue placeholder="Select staff member" />
@@ -447,7 +605,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
           {/* Submit Button */}
           <Button
             type="submit"
-            disabled={loading}
+            disabled={loading || (taskType === 'RECURRING' && !selectedStaff)}
             className="w-full h-12 bg-[#E23744] hover:bg-[#C42B37] text-white rounded-full"
             data-testid="submit-task-btn"
           >
