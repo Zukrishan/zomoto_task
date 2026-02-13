@@ -480,7 +480,9 @@ def task_to_response(task: dict) -> TaskResponse:
         proof_photos=task.get("proof_photos", []),
         created_at=task.get("created_at", ""),
         updated_at=task.get("updated_at", ""),
-        is_deleted=task.get("is_deleted", False)
+        is_deleted=task.get("is_deleted", False),
+        recurrence_type=task.get("recurrence_type"),
+        recurrence_intervals=task.get("recurrence_intervals")
     )
 
 # ============== Background Task: Check Overdue Tasks ==============
