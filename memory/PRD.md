@@ -24,9 +24,13 @@ Build a production-ready, mobile-first restaurant task management system called 
 - `allocated_datetime`: When task should start
 - Auto-calculated `deadline` = allocated_datetime + time_interval
 
-### Task Types (Implemented Feb 10, 2026)
-- `INSTANT`: One-time task
-- `RECURRING`: Placeholder for future schedule-based tasks
+### Task Types (Implemented Feb 10-13, 2026)
+- `INSTANT`: One-time task with specific allocated datetime and deadline
+- `RECURRING`: Monthly schedule-based task with day intervals
+  - Can schedule up to 5 intervals per month
+  - Example: Days 1-5, 10-15, 21-25 = task visible on those days
+  - Task only appears to assigned staff during active intervals
+  - Recurrence data stored: `recurrence_type`, `recurrence_intervals`
 
 ## What's Been Implemented
 
