@@ -79,14 +79,16 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
-        <Toaster 
-          position="top-center" 
-          richColors 
-          toastOptions={{
-            style: { fontFamily: '"DM Sans", sans-serif' }
-          }}
-        />
+        <WebSocketProvider>
+          <AppRoutes />
+          <Toaster 
+            position="top-center" 
+            richColors 
+            toastOptions={{
+              style: { fontFamily: '"DM Sans", sans-serif' }
+            }}
+          />
+        </WebSocketProvider>
       </AuthProvider>
     </BrowserRouter>
   );
