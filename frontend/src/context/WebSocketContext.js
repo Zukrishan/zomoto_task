@@ -16,7 +16,8 @@ export function WebSocketProvider({ children }) {
     const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
     // Convert http(s) to ws(s)
     const wsUrl = backendUrl.replace(/^http/, 'ws');
-    return `${wsUrl}/ws/${token}`;
+    // Use /api/ws to route through the ingress proxy
+    return `${wsUrl}/api/ws/${token}`;
   }, [token]);
 
   const connect = useCallback(() => {
