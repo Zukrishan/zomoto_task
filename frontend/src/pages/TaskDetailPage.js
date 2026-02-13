@@ -91,6 +91,7 @@ export default function TaskDetailPage() {
   const { taskId } = useParams();
   const navigate = useNavigate();
   const { user, isOwner, isManager, isStaff } = useAuth();
+  const { isConnected } = useWebSocket();
   const [task, setTask] = useState(null);
   const [comments, setComments] = useState([]);
   const [activityLog, setActivityLog] = useState([]);
@@ -103,14 +104,7 @@ export default function TaskDetailPage() {
   const [submitting, setSubmitting] = useState(false);
   const [updating, setUpdating] = useState(false);
 
-  useEffect(() => {
-    fetchTaskData();
-    if (isOwner || isManager) {
-      fetchStaffList();
-    }
-  }, [taskId]);
-
-  const fetchTaskData = async () => {
+  const fetchTaskData = useCallback(async () => {
     try {
       const [taskRes, commentsRes, activityRes, attachmentsRes] = await Promise.all([
         api.get(`/tasks/${taskId}`),
@@ -118,6 +112,60 @@ export default function TaskDetailPage() {
         api.get(`/tasks/${taskId}/activity`),
         api.get(`/tasks/${taskId}/attachments`),
       ]);
+      setTask(taskRes.data);
+      setComments(commentsRes.data);
+      setActivityLog(activityRes.data);
+      setAttachments(attachmentsRes.data);
+    } catch (error) {
+      toast.error('Failed to load task');
+      navigate('/tasks');
+    } finally {
+      setLoading(false);
+    }
+  }, [taskId, navigate]);
+
+  const fetchStaffList = useCallback(async () => {
+    try {
+      const response = await api.get('/users/staff');
+      setStaffList(response.data);
+    } catch (error) {
+      console.error('Failed to fetch staff list:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchTaskData();
+    if (isOwner || isManager) {
+      fetchStaffList();
+    }
+  }, [fetchTaskData, fetchStaffList, isOwner, isManager]);
+
+  // WebSocket handler for real-time task updates
+  const handleTaskUpdate = useCallback((message) => {
+    if (message.data?.id === taskId) {
+      setTask(message.data);
+      // Also refresh activity log
+      api.get(`/tasks/${taskId}/activity`).then(res => setActivityLog(res.data));
+    }
+  }, [taskId]);
+
+  const handleCommentAdded = useCallback((message) => {
+    if (message.data?.task_id === taskId) {
+      setComments(prev => [...prev, message.data.comment]);
+    }
+  }, [taskId]);
+
+  const handleTaskDeleted = useCallback((message) => {
+    if (message.data?.id === taskId) {
+      toast.error('This task has been deleted');
+      navigate('/tasks');
+    }
+  }, [taskId, navigate]);
+
+  // Subscribe to WebSocket events
+  useWebSocketEvent('task_update', handleTaskUpdate);
+  useWebSocketEvent('comment_added', handleCommentAdded);
+  useWebSocketEvent('task_deleted', handleTaskDeleted);
       setTask(taskRes.data);
       setComments(commentsRes.data);
       setActivityLog(activityRes.data);
