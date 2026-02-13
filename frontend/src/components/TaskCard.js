@@ -171,10 +171,13 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
 
   return (
     <Card 
-      className={`rounded-2xl border shadow-sm hover:shadow-md transition-all cursor-pointer border-l-4 
+      className={`rounded-2xl border shadow-sm hover:shadow-md transition-all cursor-pointer border-l-4 select-none
         ${isNotCompleted || isOverdue ? 'bg-red-50 border-red-200' : 'bg-white border-zinc-100'} 
         ${PRIORITY_CONFIG[task.priority]?.color || 'border-l-zinc-300'}`}
-      onClick={onClick}
+      onClick={handleClick}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
       data-testid={`task-card-${task.id}`}
     >
       <CardContent className="p-4">
