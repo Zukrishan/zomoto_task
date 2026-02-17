@@ -400,17 +400,82 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
             <div className="p-4 overflow-y-auto max-h-[70vh]">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {task.proof_photos.map((photo, index) => (
-                  <div key={index} className="relative aspect-video bg-zinc-100 rounded-xl overflow-hidden">
-                    <img 
-                      src={photo} 
-                      alt={`Proof ${index + 1}`}
-                      className="w-full h-full object-cover"
-                      data-testid={`proof-photo-${index}`}
-                    />
+                  <div key={index} className="relative group">
+                    <div className="aspect-video bg-zinc-100 rounded-xl overflow-hidden">
+                      <img 
+                        src={photo} 
+                        alt={`Proof ${index + 1}`}
+                        className="w-full h-full object-cover"
+                        data-testid={`proof-photo-${index}`}
+                      />
+                    </div>
+                    {/* Action buttons overlay */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/40 transition-all rounded-xl flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100">
+                      <Button
+                        size="sm"
+                        onClick={() => handleEnlargePhoto(photo)}
+                        className="bg-white text-zinc-900 hover:bg-zinc-100 rounded-full h-10 w-10 p-0"
+                        data-testid={`enlarge-photo-${index}`}
+                        title="Enlarge"
+                      >
+                        <Maximize2 className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        onClick={() => handleDownloadPhoto(photo, index)}
+                        className="bg-white text-zinc-900 hover:bg-zinc-100 rounded-full h-10 w-10 p-0"
+                        data-testid={`download-photo-${index}`}
+                        title="Download"
+                      >
+                        <Download className="h-5 w-5" />
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Enlarged Photo Lightbox */}
+      {enlargedPhoto && (
+        <div 
+          className="fixed inset-0 bg-black/90 z-[250] flex items-center justify-center p-4"
+          onClick={closeEnlargedPhoto}
+          data-testid="enlarged-photo-modal"
+        >
+          <div className="relative max-w-[95vw] max-h-[95vh]">
+            <img 
+              src={enlargedPhoto} 
+              alt="Enlarged proof"
+              className="max-w-full max-h-[90vh] object-contain rounded-lg"
+              onClick={(e) => e.stopPropagation()}
+            />
+            {/* Close button */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={closeEnlargedPhoto}
+              className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white rounded-full h-10 w-10"
+              data-testid="close-enlarged-photo"
+            >
+              <X className="h-6 w-6" />
+            </Button>
+            {/* Download button */}
+            <Button
+              size="sm"
+              onClick={(e) => {
+                e.stopPropagation();
+                const index = task.proof_photos.indexOf(enlargedPhoto);
+                handleDownloadPhoto(enlargedPhoto, index >= 0 ? index : 0);
+              }}
+              className="absolute bottom-4 right-4 bg-white text-zinc-900 hover:bg-zinc-100 rounded-full px-4"
+              data-testid="download-enlarged-photo"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Download
+            </Button>
           </div>
         </div>
       )}
