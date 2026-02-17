@@ -164,10 +164,17 @@ export default function TasksPage() {
 
   // Handle recurring task activation (when scheduled time arrives)
   const handleRecurringTaskActivated = useCallback((message) => {
+    console.log('handleRecurringTaskActivated called:', message);
     const newTask = message.data;
+    if (!newTask) {
+      console.error('No task data in message');
+      return;
+    }
     // Check if already in list
     setTasks(prev => {
+      console.log('Current tasks count:', prev.length, 'New task:', newTask.id);
       if (prev.some(t => t.id === newTask.id)) {
+        console.log('Task already exists in list');
         return prev; // Already exists
       }
       // Check if matches current filters
@@ -176,6 +183,7 @@ export default function TasksPage() {
         (filters.category === 'ALL' || newTask.category === filters.category) &&
         (filters.priority === 'ALL' || newTask.priority === filters.priority);
       
+      console.log('Matches filters:', matchesFilters);
       if (matchesFilters) {
         toast.info(`Scheduled task now active: ${newTask.title}`, { duration: 5000 });
         return [newTask, ...prev];
