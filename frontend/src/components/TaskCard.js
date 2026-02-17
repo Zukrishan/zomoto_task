@@ -338,6 +338,52 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
           </div>
         )}
       </CardContent>
+
+      {/* Proof Photos Modal */}
+      {showProofModal && hasProofPhotos && (
+        <div 
+          className="fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4"
+          onClick={closeProofModal}
+          data-testid="proof-modal"
+        >
+          <div 
+            className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-4 border-b border-zinc-100">
+              <h3 className="font-semibold text-zinc-900">
+                Proof Photos ({task.proof_photos.length})
+              </h3>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={closeProofModal}
+                className="rounded-full h-8 w-8"
+                data-testid="close-proof-modal"
+              >
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+            
+            {/* Modal Body - Photos Grid */}
+            <div className="p-4 overflow-y-auto max-h-[70vh]">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {task.proof_photos.map((photo, index) => (
+                  <div key={index} className="relative aspect-video bg-zinc-100 rounded-xl overflow-hidden">
+                    <img 
+                      src={photo} 
+                      alt={`Proof ${index + 1}`}
+                      className="w-full h-full object-cover"
+                      data-testid={`proof-photo-${index}`}
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }
