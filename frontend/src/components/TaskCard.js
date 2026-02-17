@@ -170,6 +170,16 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
     }
   };
 
+  const handleViewProof = (e) => {
+    e.stopPropagation();
+    setShowProofModal(true);
+  };
+
+  const closeProofModal = (e) => {
+    e?.stopPropagation();
+    setShowProofModal(false);
+  };
+
   return (
     <Card 
       className={`rounded-2xl border shadow-sm hover:shadow-md transition-all cursor-pointer border-l-4 select-none
