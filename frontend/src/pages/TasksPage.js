@@ -83,7 +83,7 @@ export default function TasksPage() {
     }
   }, [filters.status, filters.category, filters.priority]);
 
-  // Silent fetch (no loading state) for polling
+  // Silent fetch (no loading state) for polling - updates both new tasks AND status changes
   const silentFetchTasks = useCallback(async () => {
     try {
       const params = new URLSearchParams();
@@ -93,17 +93,40 @@ export default function TasksPage() {
       
       const response = await api.get(`/tasks?${params.toString()}`);
       
-      // Check if there are new tasks
-      const currentIds = new Set(tasks.map(t => t.id));
-      const newTasks = response.data.filter(t => !currentIds.has(t.id));
+      // Check if there are any changes (new tasks OR status changes)
+      const currentTasksMap = new Map(tasks.map(t => [t.id, t]));
+      const newTasksMap = new Map(response.data.map(t => [t.id, t]));
       
-      if (newTasks.length > 0) {
-        // Show notification for new recurring tasks
-        newTasks.forEach(task => {
+      let hasChanges = false;
+      
+      // Check for new tasks
+      for (const task of response.data) {
+        if (!currentTasksMap.has(task.id)) {
+          hasChanges = true;
           if (task.task_type === 'RECURRING') {
             toast.info(`Scheduled task now active: ${task.title}`, { duration: 5000 });
           }
-        });
+          break;
+        }
+        // Check for status changes
+        const currentTask = currentTasksMap.get(task.id);
+        if (currentTask && currentTask.status !== task.status) {
+          hasChanges = true;
+          break;
+        }
+      }
+      
+      // Also check if tasks were removed
+      if (!hasChanges) {
+        for (const task of tasks) {
+          if (!newTasksMap.has(task.id)) {
+            hasChanges = true;
+            break;
+          }
+        }
+      }
+      
+      if (hasChanges) {
         setTasks(response.data);
       }
     } catch (error) {
