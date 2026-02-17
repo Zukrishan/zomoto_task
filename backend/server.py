@@ -421,23 +421,52 @@ def is_task_overdue(task: dict) -> bool:
         return False
 
 def is_recurring_task_active(task: dict) -> bool:
-    """Check if recurring task should be visible today"""
+    """Check if recurring task should be visible now based on day AND time"""
     if task.get("task_type") != TaskType.RECURRING:
         return True
     
-    today = datetime.now(timezone.utc).date()
+    now = datetime.now(timezone.utc)
+    today = now.date()
+    current_time = now.time()
     recurrence_type = task.get("recurrence_type")
     
+    # Check if current day falls within any interval
+    day_is_active = False
     if recurrence_type == RecurrenceType.DAILY:
-        return True
-    
-    if recurrence_type == RecurrenceType.MONTHLY:
+        day_is_active = True
+    elif recurrence_type == RecurrenceType.MONTHLY:
         intervals = task.get("recurrence_intervals", [])
         current_day = today.day
         for interval in intervals:
             if interval.get("start_day", 0) <= current_day <= interval.get("end_day", 0):
-                return True
+                day_is_active = True
+                break
+    else:
+        day_is_active = True
+    
+    if not day_is_active:
         return False
+    
+    # Check if current time is >= allocated time
+    allocated_datetime_str = task.get("allocated_datetime")
+    if allocated_datetime_str:
+        try:
+            # Parse the allocated datetime
+            if isinstance(allocated_datetime_str, str):
+                allocated_dt = datetime.fromisoformat(allocated_datetime_str.replace('Z', '+00:00'))
+            else:
+                allocated_dt = allocated_datetime_str
+            
+            # Get just the time part for comparison
+            allocated_time = allocated_dt.time()
+            
+            # Task is only visible if current time >= allocated time
+            if current_time < allocated_time:
+                return False
+        except Exception as e:
+            logger.error(f"Error parsing allocated_datetime: {e}")
+            # If parsing fails, show the task
+            pass
     
     return True
 
