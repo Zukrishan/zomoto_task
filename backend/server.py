@@ -61,31 +61,52 @@ class ConnectionManager:
         if user_id not in self.active_connections:
             self.active_connections[user_id] = []
         self.active_connections[user_id].append(websocket)
+        logger.info(f"WebSocket connected for user {user_id}. Total connections for user: {len(self.active_connections[user_id])}")
     
     def disconnect(self, websocket: WebSocket, user_id: str):
         if user_id in self.active_connections:
             if websocket in self.active_connections[user_id]:
                 self.active_connections[user_id].remove(websocket)
+                logger.info(f"WebSocket disconnected for user {user_id}. Remaining: {len(self.active_connections[user_id])}")
+    
+    def get_active_user_count(self):
+        return sum(len(conns) for conns in self.active_connections.values())
     
     async def broadcast_to_user(self, user_id: str, message: dict):
         if user_id in self.active_connections:
-            for connection in self.active_connections[user_id]:
+            connections = self.active_connections[user_id][:]  # Copy to avoid modification during iteration
+            sent_count = 0
+            for connection in connections:
                 try:
                     await connection.send_json(message)
-                except:
-                    pass
+                    sent_count += 1
+                except Exception as e:
+                    logger.error(f"Failed to send to user {user_id}: {e}")
+                    # Remove dead connection
+                    if connection in self.active_connections.get(user_id, []):
+                        self.active_connections[user_id].remove(connection)
+            logger.info(f"Broadcast to user {user_id}: sent to {sent_count}/{len(connections)} connections")
+            return sent_count > 0
+        else:
+            logger.warning(f"No active connections for user {user_id}")
+            return False
     
     async def broadcast_to_users(self, user_ids: List[str], message: dict):
         for user_id in user_ids:
             await self.broadcast_to_user(user_id, message)
     
     async def broadcast_to_all(self, message: dict):
-        for user_id, connections in self.active_connections.items():
-            for connection in connections:
+        total_sent = 0
+        for user_id, connections in list(self.active_connections.items()):
+            for connection in connections[:]:
                 try:
                     await connection.send_json(message)
-                except:
-                    pass
+                    total_sent += 1
+                except Exception as e:
+                    logger.error(f"Failed to broadcast to user {user_id}: {e}")
+                    if connection in self.active_connections.get(user_id, []):
+                        self.active_connections[user_id].remove(connection)
+        logger.info(f"Broadcast to all: sent to {total_sent} connections")
 
 manager = ConnectionManager()
 
