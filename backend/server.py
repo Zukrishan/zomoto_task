@@ -556,6 +556,99 @@ async def check_overdue_tasks():
             logger.error(f"Error in overdue check: {e}")
             await asyncio.sleep(60)
 
+# Track which recurring tasks have been activated today to avoid duplicate broadcasts
+activated_recurring_tasks = set()
+
+async def check_recurring_tasks_activation():
+    """Background task to broadcast recurring tasks when their scheduled time arrives"""
+    global activated_recurring_tasks
+    
+    # Reset the set at midnight
+    last_reset_date = datetime.now(timezone.utc).date()
+    
+    while True:
+        try:
+            now = datetime.now(timezone.utc)
+            today = now.date()
+            current_time = now.time()
+            current_day = today.day
+            
+            # Reset activated tasks at midnight
+            if today != last_reset_date:
+                activated_recurring_tasks = set()
+                last_reset_date = today
+            
+            # Find all recurring tasks that might need activation
+            recurring_tasks = await db.tasks.find({
+                "task_type": TaskType.RECURRING,
+                "is_deleted": {"$ne": True},
+                "status": {"$nin": [TaskStatus.COMPLETED, TaskStatus.VERIFIED, TaskStatus.NOT_COMPLETED]}
+            }, {"_id": 0}).to_list(1000)
+            
+            for task in recurring_tasks:
+                task_id = task["id"]
+                
+                # Skip if already activated today
+                if task_id in activated_recurring_tasks:
+                    continue
+                
+                # Check if day is within intervals
+                recurrence_type = task.get("recurrence_type")
+                if recurrence_type == RecurrenceType.MONTHLY:
+                    intervals = task.get("recurrence_intervals", [])
+                    day_active = any(
+                        interval.get("start_day", 0) <= current_day <= interval.get("end_day", 0)
+                        for interval in intervals
+                    )
+                    if not day_active:
+                        continue
+                
+                # Check if allocated time has been reached
+                allocated_datetime_str = task.get("allocated_datetime")
+                if allocated_datetime_str:
+                    try:
+                        if isinstance(allocated_datetime_str, str):
+                            allocated_dt = datetime.fromisoformat(allocated_datetime_str.replace('Z', '+00:00'))
+                        else:
+                            allocated_dt = allocated_datetime_str
+                        
+                        allocated_time = allocated_dt.time()
+                        
+                        # If current time just passed allocated time (within last 60 seconds window)
+                        # Convert times to seconds for comparison
+                        current_seconds = current_time.hour * 3600 + current_time.minute * 60 + current_time.second
+                        allocated_seconds = allocated_time.hour * 3600 + allocated_time.minute * 60 + allocated_time.second
+                        
+                        # If we're within 60 seconds after the allocated time, broadcast
+                        if 0 <= (current_seconds - allocated_seconds) <= 60:
+                            # Mark as activated
+                            activated_recurring_tasks.add(task_id)
+                            
+                            # Broadcast to the assigned user
+                            if task.get("assigned_to"):
+                                task_response = task_to_response(task).model_dump()
+                                await manager.broadcast_to_user(task["assigned_to"], {
+                                    "type": "recurring_task_activated",
+                                    "data": task_response
+                                })
+                                logger.info(f"Recurring task '{task['title']}' activated for user {task['assigned_to']}")
+                                
+                                # Also create a notification
+                                await create_notification(
+                                    task["assigned_to"],
+                                    "TASK_ASSIGNED",
+                                    "Scheduled Task Active",
+                                    f"Task '{task['title']}' is now active",
+                                    task_id
+                                )
+                    except Exception as e:
+                        logger.error(f"Error checking recurring task time: {e}")
+            
+            await asyncio.sleep(30)  # Check every 30 seconds
+        except Exception as e:
+            logger.error(f"Error in recurring task activation check: {e}")
+            await asyncio.sleep(60)
+
 # ============== AUTH ROUTES ==============
 
 @api_router.post("/auth/login", response_model=TokenResponse)
