@@ -235,7 +235,11 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
   const handleClose = () => {
     reset();
     setSelectedDate(new Date());
-    setSelectedTime(format(new Date(), 'HH:mm'));
+    try {
+      setSelectedTime(format(new Date(), 'HH:mm'));
+    } catch {
+      setSelectedTime('09:00');
+    }
     setSelectedStaff('');
     setCategory('Other');
     setPriority('MEDIUM');
