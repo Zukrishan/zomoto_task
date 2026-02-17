@@ -28,6 +28,7 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
   const [loading, setLoading] = useState(false);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [showProofModal, setShowProofModal] = useState(false);
+  const [enlargedPhoto, setEnlargedPhoto] = useState(null);
   const longPressTimer = useRef(null);
   const isLongPress = useRef(false);
   
