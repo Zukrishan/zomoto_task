@@ -239,14 +239,27 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
 
   // Calculate deadline preview
   const getDeadlinePreview = () => {
-    const [hours, minutes] = selectedTime.split(':');
-    const allocatedDateTime = new Date(selectedDate);
-    allocatedDateTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
-    
-    if (timeUnit === 'HOURS') {
-      return addHours(allocatedDateTime, parseInt(timeInterval));
+    try {
+      if (!selectedTime || !selectedDate) return new Date();
+      const timeParts = selectedTime.split(':');
+      if (timeParts.length !== 2) return new Date();
+      
+      const hours = parseInt(timeParts[0]) || 0;
+      const minutes = parseInt(timeParts[1]) || 0;
+      const allocatedDateTime = new Date(selectedDate);
+      
+      if (isNaN(allocatedDateTime.getTime())) return new Date();
+      
+      allocatedDateTime.setHours(hours, minutes, 0, 0);
+      
+      const interval = parseInt(timeInterval) || 30;
+      if (timeUnit === 'HOURS') {
+        return addHours(allocatedDateTime, interval);
+      }
+      return addMinutes(allocatedDateTime, interval);
+    } catch (e) {
+      return new Date();
     }
-    return addMinutes(allocatedDateTime, parseInt(timeInterval));
   };
 
   const filteredTemplates = templates.filter(t => 
