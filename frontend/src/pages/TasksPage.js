@@ -139,11 +139,11 @@ export default function TasksPage() {
     fetchTasks();
   }, [fetchTasks]);
 
-  // Polling fallback for recurring tasks - check every 30 seconds
+  // Polling fallback for real-time updates - check every 10 seconds
   useEffect(() => {
     const pollInterval = setInterval(() => {
       silentFetchTasks();
-    }, 30000); // 30 seconds
+    }, 10000); // 10 seconds for faster status updates
     
     return () => clearInterval(pollInterval);
   }, [silentFetchTasks]);
