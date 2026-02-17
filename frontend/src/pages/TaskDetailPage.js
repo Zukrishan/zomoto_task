@@ -140,6 +140,25 @@ export default function TaskDetailPage() {
     }
   }, [fetchTaskData, fetchStaffList, isOwner, isManager]);
 
+  // Polling fallback for real-time updates (every 10 seconds for task detail)
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      // Silent refresh of task data
+      api.get(`/tasks/${taskId}`).then(res => {
+        // Only update if status changed
+        if (task && res.data.status !== task.status) {
+          setTask(res.data);
+          // Also refresh activity log
+          api.get(`/tasks/${taskId}/activity`).then(actRes => setActivityLog(actRes.data));
+        }
+      }).catch(err => {
+        console.error('Polling fetch failed:', err);
+      });
+    }, 10000); // Poll every 10 seconds for task detail page
+    
+    return () => clearInterval(pollInterval);
+  }, [taskId, task]);
+
   // WebSocket handler for real-time task updates
   const handleTaskUpdate = useCallback((message) => {
     if (message.data?.id === taskId) {
