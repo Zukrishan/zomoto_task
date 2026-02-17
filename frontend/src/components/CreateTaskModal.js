@@ -91,7 +91,11 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
       document.body.style.overflow = 'hidden';
       // Set default allocated time to now
       setSelectedDate(new Date());
-      setSelectedTime(format(new Date(), 'HH:mm'));
+      try {
+        setSelectedTime(format(new Date(), 'HH:mm'));
+      } catch {
+        setSelectedTime('09:00');
+      }
     } else {
       document.body.style.overflow = '';
     }
