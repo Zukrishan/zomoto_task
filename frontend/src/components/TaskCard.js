@@ -179,6 +179,35 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
   const closeProofModal = (e) => {
     e?.stopPropagation();
     setShowProofModal(false);
+    setEnlargedPhoto(null);
+  };
+
+  const handleEnlargePhoto = (photo) => {
+    setEnlargedPhoto(photo);
+  };
+
+  const closeEnlargedPhoto = (e) => {
+    e?.stopPropagation();
+    setEnlargedPhoto(null);
+  };
+
+  const handleDownloadPhoto = async (photoUrl, index) => {
+    try {
+      const response = await fetch(photoUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `proof_${task.title.replace(/\s+/g, '_')}_${index + 1}.jpg`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      toast.success('Photo downloaded!');
+    } catch (error) {
+      // Fallback: open in new tab
+      window.open(photoUrl, '_blank');
+    }
   };
 
   return (
