@@ -59,6 +59,8 @@ export default function DashboardPage() {
   useWebSocketEvent('task_update', handleTaskEvent);
   useWebSocketEvent('task_deleted', handleTaskEvent);
   useWebSocketEvent('tasks_deleted', handleTaskEvent);
+  useWebSocketEvent('recurring_task_activated', handleTaskEvent);
+  useWebSocketEvent('tasks_deleted', handleTaskEvent);
 
   const StatCard = ({ icon: Icon, label, value, color, onClick }) => (
     <Card 
