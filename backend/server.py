@@ -121,9 +121,7 @@ class ConnectionManager:
         for user_id, connections in list(self.active_connections.items()):
             for connection in connections[:]:
                 try:
-                    if connection.client_state.name != 'CONNECTED':
-                        dead_connections.append((user_id, connection))
-                        continue
+                    # Try to send regardless of state - let the exception handler deal with failures
                     await connection.send_json(message)
                     total_sent += 1
                 except Exception as e:
