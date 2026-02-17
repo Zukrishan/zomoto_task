@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { formatDistanceToNow } from 'date-fns';
-import { Clock, User, AlertCircle, Timer, Repeat, Play, CheckCircle2, Camera, ShieldCheck, Loader2 } from 'lucide-react';
+import { Clock, User, AlertCircle, Timer, Repeat, Play, CheckCircle2, Camera, ShieldCheck, Loader2, Eye, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
