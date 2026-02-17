@@ -121,7 +121,7 @@ export default function NotificationBell() {
       </Button>
 
       {showDropdown && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-zinc-100 z-[100] overflow-hidden animate-slide-up" data-testid="notification-dropdown">
+        <div className="fixed left-4 md:left-auto md:absolute md:left-0 top-16 md:top-full md:mt-2 w-80 bg-white rounded-2xl shadow-xl border border-zinc-100 z-[100] overflow-hidden animate-slide-up" data-testid="notification-dropdown">
           {/* Header */}
           <div className="px-4 py-3 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
             <h3 className="font-semibold text-zinc-900">Notifications</h3>
@@ -130,7 +130,7 @@ export default function NotificationBell() {
                 variant="ghost"
                 size="sm"
                 onClick={handleMarkAllRead}
-                className="text-xs text-[#E23744] hover:text-[#C42B37]"
+                className="text-xs text-[#E23744] hover:text-[#C42B37] whitespace-nowrap"
                 data-testid="mark-all-read-btn"
               >
                 <CheckCheck className="h-4 w-4 mr-1" />
