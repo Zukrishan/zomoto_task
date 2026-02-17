@@ -121,7 +121,7 @@ export default function NotificationBell() {
       </Button>
 
       {showDropdown && (
-        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-zinc-100 z-50 overflow-hidden animate-slide-up" data-testid="notification-dropdown">
+        <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-2xl shadow-xl border border-zinc-100 z-[100] overflow-hidden animate-slide-up" data-testid="notification-dropdown">
           {/* Header */}
           <div className="px-4 py-3 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
             <h3 className="font-semibold text-zinc-900">Notifications</h3>
