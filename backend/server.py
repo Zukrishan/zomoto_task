@@ -68,28 +68,47 @@ class ConnectionManager:
             if websocket in self.active_connections[user_id]:
                 self.active_connections[user_id].remove(websocket)
                 logger.info(f"WebSocket disconnected for user {user_id}. Remaining: {len(self.active_connections[user_id])}")
+            # Clean up empty user entries
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
     
     def get_active_user_count(self):
         return sum(len(conns) for conns in self.active_connections.values())
     
     async def broadcast_to_user(self, user_id: str, message: dict):
-        if user_id in self.active_connections:
-            connections = self.active_connections[user_id][:]  # Copy to avoid modification during iteration
-            sent_count = 0
-            for connection in connections:
-                try:
-                    await connection.send_json(message)
-                    sent_count += 1
-                except Exception as e:
-                    logger.error(f"Failed to send to user {user_id}: {e}")
-                    # Remove dead connection
-                    if connection in self.active_connections.get(user_id, []):
-                        self.active_connections[user_id].remove(connection)
-            logger.info(f"Broadcast to user {user_id}: sent to {sent_count}/{len(connections)} connections")
-            return sent_count > 0
-        else:
+        if user_id not in self.active_connections:
             logger.warning(f"No active connections for user {user_id}")
             return False
+        
+        connections = self.active_connections[user_id][:]  # Copy to avoid modification during iteration
+        sent_count = 0
+        dead_connections = []
+        
+        for connection in connections:
+            try:
+                # Check if connection is still open
+                if connection.client_state.name != 'CONNECTED':
+                    dead_connections.append(connection)
+                    continue
+                    
+                await connection.send_json(message)
+                sent_count += 1
+            except Exception as e:
+                logger.error(f"Failed to send to user {user_id}: {e}")
+                dead_connections.append(connection)
+        
+        # Clean up dead connections
+        for dead in dead_connections:
+            if dead in self.active_connections.get(user_id, []):
+                self.active_connections[user_id].remove(dead)
+                logger.info(f"Removed dead connection for user {user_id}")
+        
+        # Clean up empty user entries
+        if user_id in self.active_connections and not self.active_connections[user_id]:
+            del self.active_connections[user_id]
+        
+        logger.info(f"Broadcast to user {user_id}: sent to {sent_count} connections")
+        return sent_count > 0
     
     async def broadcast_to_users(self, user_ids: List[str], message: dict):
         for user_id in user_ids:
@@ -97,15 +116,30 @@ class ConnectionManager:
     
     async def broadcast_to_all(self, message: dict):
         total_sent = 0
+        dead_connections = []
+        
         for user_id, connections in list(self.active_connections.items()):
             for connection in connections[:]:
                 try:
+                    if connection.client_state.name != 'CONNECTED':
+                        dead_connections.append((user_id, connection))
+                        continue
                     await connection.send_json(message)
                     total_sent += 1
                 except Exception as e:
                     logger.error(f"Failed to broadcast to user {user_id}: {e}")
-                    if connection in self.active_connections.get(user_id, []):
-                        self.active_connections[user_id].remove(connection)
+                    dead_connections.append((user_id, connection))
+        
+        # Clean up dead connections
+        for user_id, dead in dead_connections:
+            if dead in self.active_connections.get(user_id, []):
+                self.active_connections[user_id].remove(dead)
+        
+        # Clean up empty entries
+        for user_id in list(self.active_connections.keys()):
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+        
         logger.info(f"Broadcast to all: sent to {total_sent} connections")
 
 manager = ConnectionManager()
