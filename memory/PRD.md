@@ -158,13 +158,17 @@ All endpoints prefixed with `/api`
 - ✅ Time-bound tasks
 - ✅ Proof photo upload requirement
 - ✅ Task edit functionality fix
+- ✅ Recurring task assignment optional (Feb 17, 2026)
+- ✅ Dynamic categories in Create Task modal (Feb 17, 2026)
+- ✅ Password field in Add User modal (Feb 17, 2026)
+- ✅ Notification dropdown z-index and positioning fix (Feb 17, 2026)
 
-### P1 (High Priority) - Next
-- [ ] Multi-select and "Select All" for bulk task deletion
-- [ ] WebSocket real-time updates on frontend
-- [ ] SMS notifications via notify.lk on task events
+### P1 (High Priority) - DONE
+- ✅ Multi-select and "Select All" for bulk task deletion
+- ✅ WebSocket real-time updates on frontend
+- ✅ Long-press to select on mobile
 
-### P2 (Medium Priority)
+### P2 (Medium Priority) - Next
 - [ ] SMS notifications via notify.lk on task events
 - [ ] Web Push notifications via Firebase
 - [ ] Performance reports (tasks per staff, verification rate)
