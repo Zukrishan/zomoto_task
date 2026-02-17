@@ -83,10 +83,47 @@ export default function TasksPage() {
     }
   }, [filters.status, filters.category, filters.priority]);
 
+  // Silent fetch (no loading state) for polling
+  const silentFetchTasks = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (filters.status !== 'ALL') params.append('status', filters.status);
+      if (filters.category !== 'ALL') params.append('category', filters.category);
+      if (filters.priority !== 'ALL') params.append('priority', filters.priority);
+      
+      const response = await api.get(`/tasks?${params.toString()}`);
+      
+      // Check if there are new tasks
+      const currentIds = new Set(tasks.map(t => t.id));
+      const newTasks = response.data.filter(t => !currentIds.has(t.id));
+      
+      if (newTasks.length > 0) {
+        // Show notification for new recurring tasks
+        newTasks.forEach(task => {
+          if (task.task_type === 'RECURRING') {
+            toast.info(`Scheduled task now active: ${task.title}`, { duration: 5000 });
+          }
+        });
+        setTasks(response.data);
+      }
+    } catch (error) {
+      console.error('Silent fetch failed:', error);
+    }
+  }, [filters.status, filters.category, filters.priority, tasks]);
+
   // Fetch tasks on filter change
   useEffect(() => {
     fetchTasks();
   }, [fetchTasks]);
+
+  // Polling fallback for recurring tasks - check every 30 seconds
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      silentFetchTasks();
+    }, 30000); // 30 seconds
+    
+    return () => clearInterval(pollInterval);
+  }, [silentFetchTasks]);
 
   // Clear selection when exiting select mode
   useEffect(() => {
