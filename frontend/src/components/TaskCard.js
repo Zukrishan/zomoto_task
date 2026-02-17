@@ -241,7 +241,7 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
         </div>
 
         {/* Action Buttons Row */}
-        {(canStart || canUploadProof || canComplete || canVerify) && (
+        {(canStart || canUploadProof || canComplete || canVerify || hasProofPhotos) && (
           <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-100" onClick={(e) => e.stopPropagation()}>
             {/* Start Task Button */}
             {canStart && (
@@ -285,6 +285,20 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
                   onClick={(e) => e.stopPropagation()}
                 />
               </label>
+            )}
+
+            {/* View Proof Button - visible when there are proof photos */}
+            {hasProofPhotos && !canUploadProof && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleViewProof}
+                className="rounded-full h-8 px-4 border-blue-500 text-blue-600 hover:bg-blue-50"
+                data-testid={`view-proof-${task.id}`}
+              >
+                <Eye className="h-3.5 w-3.5 mr-1" />
+                View Proof ({task.proof_photos.length})
+              </Button>
             )}
 
             {/* Complete Task Button */}
