@@ -27,6 +27,7 @@ const LONG_PRESS_DURATION = 500;
 export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onLongPress, selectMode }) {
   const [loading, setLoading] = useState(false);
   const [uploadingProof, setUploadingProof] = useState(false);
+  const [showProofModal, setShowProofModal] = useState(false);
   const longPressTimer = useRef(null);
   const isLongPress = useRef(false);
   
