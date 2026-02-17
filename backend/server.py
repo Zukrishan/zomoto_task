@@ -1337,6 +1337,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(check_overdue_tasks())
+    asyncio.create_task(check_recurring_tasks_activation())
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
