@@ -31,7 +31,6 @@ const taskSchema = z.object({
   priority: z.string().min(1, 'Priority is required'),
 });
 
-const CATEGORY_OPTIONS = ['Kitchen', 'Cleaning', 'Maintenance', 'Other'];
 const PRIORITY_OPTIONS = [
   { value: 'HIGH', label: 'High' },
   { value: 'MEDIUM', label: 'Medium' },
@@ -50,6 +49,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
   const modalRef = useRef(null);
   const [templates, setTemplates] = useState([]);
   const [staffList, setStaffList] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [selectedTime, setSelectedTime] = useState(() => {
@@ -88,6 +88,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     if (open) {
       fetchTemplates();
       fetchStaff();
+      fetchCategories();
       document.body.style.overflow = 'hidden';
       // Set default allocated time to now
       setSelectedDate(new Date());
@@ -119,6 +120,15 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
       setStaffList(response.data);
     } catch (error) {
       console.error('Failed to fetch staff:', error);
+    }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('/categories');
+      setCategories(response.data);
+    } catch (error) {
+      console.error('Failed to fetch categories:', error);
     }
   };
 
