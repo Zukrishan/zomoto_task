@@ -162,11 +162,34 @@ export default function TasksPage() {
     });
   }, []);
 
+  // Handle recurring task activation (when scheduled time arrives)
+  const handleRecurringTaskActivated = useCallback((message) => {
+    const newTask = message.data;
+    // Check if already in list
+    setTasks(prev => {
+      if (prev.some(t => t.id === newTask.id)) {
+        return prev; // Already exists
+      }
+      // Check if matches current filters
+      const matchesFilters = 
+        (filters.status === 'ALL' || newTask.status === filters.status) &&
+        (filters.category === 'ALL' || newTask.category === filters.category) &&
+        (filters.priority === 'ALL' || newTask.priority === filters.priority);
+      
+      if (matchesFilters) {
+        toast.info(`Scheduled task now active: ${newTask.title}`, { duration: 5000 });
+        return [newTask, ...prev];
+      }
+      return prev;
+    });
+  }, [filters]);
+
   // Subscribe to WebSocket events
   useWebSocketEvent('task_created', handleTaskCreated);
   useWebSocketEvent('task_update', handleTaskUpdated);
   useWebSocketEvent('task_deleted', handleTaskDeleted);
   useWebSocketEvent('tasks_deleted', handleTasksDeleted);
+  useWebSocketEvent('recurring_task_activated', handleRecurringTaskActivated);
 
   const filteredTasks = tasks.filter(task => 
     task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
