@@ -51,8 +51,14 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
   const [templates, setTemplates] = useState([]);
   const [staffList, setStaffList] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(new Date());
-  const [selectedTime, setSelectedTime] = useState(format(new Date(), 'HH:mm'));
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+  const [selectedTime, setSelectedTime] = useState(() => {
+    try {
+      return format(new Date(), 'HH:mm');
+    } catch {
+      return '09:00';
+    }
+  });
   const [selectedStaff, setSelectedStaff] = useState('');
   const [showTemplateList, setShowTemplateList] = useState(false);
   const [category, setCategory] = useState('Other');
