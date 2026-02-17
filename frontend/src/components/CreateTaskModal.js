@@ -499,9 +499,16 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {CATEGORY_OPTIONS.map(cat => (
-                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
-                  ))}
+                  {categories.length > 0 ? categories.map(cat => (
+                    <SelectItem key={cat.id} value={cat.name}>{cat.name}</SelectItem>
+                  )) : (
+                    <>
+                      <SelectItem value="Kitchen">Kitchen</SelectItem>
+                      <SelectItem value="Cleaning">Cleaning</SelectItem>
+                      <SelectItem value="Maintenance">Maintenance</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
             </div>
