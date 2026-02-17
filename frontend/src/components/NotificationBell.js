@@ -125,12 +125,12 @@ export default function NotificationBell() {
           {/* Header */}
           <div className="px-4 py-3 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
             <h3 className="font-semibold text-zinc-900">Notifications</h3>
-            {unreadCount > 0 && (
+            {notifications.length > 0 && unreadCount > 0 && (
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={handleMarkAllRead}
-                className="text-xs text-[#E23744] hover:text-[#C42B37] whitespace-nowrap"
+                className="text-xs text-[#E23744] hover:text-[#C42B37] whitespace-nowrap h-8 px-2"
                 data-testid="mark-all-read-btn"
               >
                 <CheckCheck className="h-4 w-4 mr-1" />
