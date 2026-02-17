@@ -42,18 +42,25 @@ export function WebSocketProvider({ children }) {
 
       ws.current.onmessage = (event) => {
         try {
+          // Handle pong response
+          if (event.data === 'pong') {
+            return;
+          }
+          
           const message = JSON.parse(event.data);
+          console.log('WebSocket received:', message.type, message.data?.title || message.data?.id || '');
           setLastMessage(message);
           
           // Notify all listeners for this message type
           const typeListeners = listeners.current.get(message.type) || [];
+          console.log(`Listeners for ${message.type}:`, typeListeners.length);
           typeListeners.forEach(callback => callback(message));
           
           // Also notify "all" listeners
           const allListeners = listeners.current.get('*') || [];
           allListeners.forEach(callback => callback(message));
         } catch (e) {
-          console.error('Failed to parse WebSocket message:', e);
+          console.error('Failed to parse WebSocket message:', e, event.data);
         }
       };
 
