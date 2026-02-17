@@ -631,7 +631,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
 
           {/* Assign To */}
           <div className="space-y-2">
-            <Label>Assign To {taskType === 'RECURRING' ? '(Required)' : '(Optional)'}</Label>
+            <Label>Assign To (Optional)</Label>
             <Select value={selectedStaff} onValueChange={setSelectedStaff}>
               <SelectTrigger className="rounded-xl" data-testid="task-assign-select">
                 <SelectValue placeholder="Select staff member" />
@@ -649,7 +649,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
           {/* Submit Button */}
           <Button
             type="submit"
-            disabled={loading || (taskType === 'RECURRING' && !selectedStaff)}
+            disabled={loading}
             className="w-full h-12 bg-[#E23744] hover:bg-[#C42B37] text-white rounded-full"
             data-testid="submit-task-btn"
           >
