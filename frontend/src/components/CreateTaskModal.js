@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { toast } from 'sonner';
 import { Loader2, Plus, Calendar as CalendarIcon, X, Clock, Repeat, Trash2 } from 'lucide-react';
 import { format, addHours, addMinutes, addMonths } from 'date-fns';
-import api from '../lib/api';
+import api, { getErrorMessage } from '../lib/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';

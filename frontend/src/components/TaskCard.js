@@ -5,7 +5,7 @@ import { toast } from 'sonner';
 import { Card, CardContent } from './ui/card';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
-import api from '../lib/api';
+import api, { getErrorMessage } from '../lib/api';
 
 const STATUS_CONFIG = {
   PENDING: { label: 'Pending', color: 'bg-blue-100 text-blue-700' },
