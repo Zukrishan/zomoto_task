@@ -31,4 +31,20 @@ api.interceptors.response.use(
   }
 );
 
+// Helper function to extract error message from API errors
+export const getErrorMessage = (error, defaultMessage = 'An error occurred') => {
+  const errorDetail = error.response?.data?.detail;
+  
+  if (Array.isArray(errorDetail)) {
+    // Handle Pydantic validation errors (array of error objects)
+    return errorDetail.map(e => e.msg || e.message || 'Validation error').join(', ');
+  } else if (typeof errorDetail === 'string') {
+    return errorDetail;
+  } else if (typeof errorDetail === 'object' && errorDetail?.msg) {
+    return errorDetail.msg;
+  }
+  
+  return error.message || defaultMessage;
+};
+
 export default api;
