@@ -78,7 +78,7 @@ export default function UsersPage() {
       setNewUser({ name: '', email: '', phone: '', password: '123456', role: 'STAFF' });
       fetchUsers();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create user');
+      toast.error(getErrorMessage(error, 'Failed to create user'));
     } finally {
       setCreating(false);
     }

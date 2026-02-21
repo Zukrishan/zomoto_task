@@ -313,7 +313,7 @@ export default function TasksPage() {
       setSelectMode(false);
       fetchTasks();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to delete tasks');
+      toast.error(getErrorMessage(error, 'Failed to delete tasks'));
     } finally {
       setDeleting(false);
     }
