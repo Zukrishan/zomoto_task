@@ -298,11 +298,11 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
   };
 
   const filteredTemplates = templates.filter(t => 
-    t.name.toLowerCase().includes(titleValue?.toLowerCase() || '')
+    (t.title || '').toLowerCase().includes(titleValue?.toLowerCase() || '')
   );
 
   const showAddToLibrary = titleValue && 
-    !templates.some(t => t.name.toLowerCase() === titleValue.toLowerCase());
+    !templates.some(t => (t.title || '').toLowerCase() === titleValue.toLowerCase());
 
   if (!open) return null;
 
