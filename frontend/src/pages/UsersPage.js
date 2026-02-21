@@ -285,9 +285,22 @@ export default function UsersPage() {
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-sm text-zinc-500">
-              Default password: <span className="font-mono bg-zinc-100 px-2 py-1 rounded">123456</span>
-            </p>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={newUser.password}
+                onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                placeholder="Enter password"
+                className="rounded-xl"
+                required
+                data-testid="new-user-password"
+              />
+              <p className="text-xs text-zinc-500">
+                Minimum 6 characters
+              </p>
+            </div>
             <Button
               type="submit"
               disabled={creating}
