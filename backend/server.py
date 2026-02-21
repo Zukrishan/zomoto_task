@@ -909,7 +909,7 @@ async def complete_task(task_id: str, db: Session = Depends(get_db), current_use
         raise HTTPException(status_code=400, detail="Proof photo required before completing")
     
     task.status = "COMPLETED"
-    task.completed_at = datetime.now(timezone.utc)
+    task.completed_at = datetime.utcnow()
     db.commit()
     db.refresh(task)
     
