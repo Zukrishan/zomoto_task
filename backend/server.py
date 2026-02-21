@@ -1197,18 +1197,18 @@ async def check_overdue_tasks():
             db = SessionLocal()
             now = datetime.now(timezone.utc)
             
-            # Find tasks that are overdue
+            # Find IN_PROGRESS tasks that are overdue (only started tasks can be "overdue")
+            # PENDING tasks just haven't been started yet - they're not overdue
             overdue_tasks = db.query(Task).filter(
                 Task.is_deleted == False,
-                Task.status.in_(["PENDING", "IN_PROGRESS"]),
+                Task.status == "IN_PROGRESS",  # Only IN_PROGRESS tasks can become NOT_COMPLETED
                 Task.deadline < now,
                 Task.is_overdue == False
             ).all()
             
             for task in overdue_tasks:
                 task.is_overdue = True
-                if task.status in ["PENDING", "IN_PROGRESS"]:
-                    task.status = "NOT_COMPLETED"
+                task.status = "NOT_COMPLETED"
                 
                 if task.assigned_to:
                     notification = Notification(
