@@ -4,7 +4,7 @@ import { Plus, Filter, Search, ClipboardList, Trash2, X, CheckSquare, Square, Wi
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket, useWebSocketEvent } from '../context/WebSocketContext';
-import api from '../lib/api';
+import api, { getErrorMessage } from '../lib/api';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
