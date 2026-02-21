@@ -133,14 +133,14 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
   };
 
   const handleTemplateSelect = (template) => {
-    setValue('title', template.name);
-    if (template.default_category) {
-      setValue('category', template.default_category);
-      setCategory(template.default_category);
+    setValue('title', template.title);
+    if (template.category) {
+      setValue('category', template.category);
+      setCategory(template.category);
     }
-    if (template.default_priority) {
-      setValue('priority', template.default_priority);
-      setPriority(template.default_priority);
+    if (template.priority) {
+      setValue('priority', template.priority);
+      setPriority(template.priority);
     }
     setShowTemplateList(false);
   };
