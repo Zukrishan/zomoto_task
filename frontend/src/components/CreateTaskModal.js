@@ -227,7 +227,18 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
       // Add recurring fields if task type is RECURRING
       if (taskType === 'RECURRING') {
         taskData.recurrence_type = 'MONTHLY';
-        taskData.recurrence_intervals = recurrenceIntervals;
+        // Convert interval ranges to flat list of day numbers
+        const daysList = [];
+        recurrenceIntervals.forEach(interval => {
+          const startDay = parseInt(interval.start_day) || 1;
+          const endDay = parseInt(interval.end_day) || startDay;
+          for (let day = Math.min(startDay, endDay); day <= Math.max(startDay, endDay); day++) {
+            if (day >= 1 && day <= 31 && !daysList.includes(day)) {
+              daysList.push(day);
+            }
+          }
+        });
+        taskData.recurrence_intervals = daysList.sort((a, b) => a - b);
         taskData.recurrence_end_date = addMonths(new Date(), 1).toISOString();
       }
       
