@@ -32,9 +32,10 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
   const longPressTimer = useRef(null);
   const isLongPress = useRef(false);
   
-  // Use the is_overdue flag from backend or check deadline
+  // Use the is_overdue flag from backend - only tasks that were started (IN_PROGRESS) can be overdue
+  // PENDING tasks just haven't been started yet, they're not "overdue"
   const isOverdue = task.is_overdue || (task.deadline && new Date(task.deadline) < new Date() && 
-    !['COMPLETED', 'VERIFIED', 'NOT_COMPLETED'].includes(task.status));
+    task.status === 'IN_PROGRESS');
   
   const isNotCompleted = task.status === 'NOT_COMPLETED';
   const isRecurring = task.task_type === 'RECURRING';
