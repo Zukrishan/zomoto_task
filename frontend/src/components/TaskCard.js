@@ -111,7 +111,7 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
       toast.success('Task started!');
       onTaskUpdate?.();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to start task');
+      toast.error(getErrorMessage(error, 'Failed to start task'));
     } finally {
       setLoading(false);
     }
@@ -129,7 +129,7 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
       toast.success('Task completed!');
       onTaskUpdate?.();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to complete task');
+      toast.error(getErrorMessage(error, 'Failed to complete task'));
     } finally {
       setLoading(false);
     }
@@ -143,7 +143,7 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
       toast.success('Task verified!');
       onTaskUpdate?.();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to verify task');
+      toast.error(getErrorMessage(error, 'Failed to verify task'));
     } finally {
       setLoading(false);
     }
