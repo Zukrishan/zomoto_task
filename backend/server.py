@@ -741,6 +741,7 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
     
     # Filter recurring tasks by day and time
     now = datetime.now(timezone.utc)
+    now_naive = now.replace(tzinfo=None)  # For comparison with naive datetimes from DB
     today = now.day
     
     tasks = query.order_by(Task.created_at.desc()).all()
@@ -751,7 +752,8 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
         if task.task_type == "RECURRING" and task.recurrence_intervals:
             if today not in task.recurrence_intervals:
                 continue
-            if task.allocated_datetime and task.allocated_datetime > now:
+            # Compare naive datetimes (MySQL stores naive datetimes)
+            if task.allocated_datetime and task.allocated_datetime > now_naive:
                 continue
         
         result.append(task_to_response(task))
