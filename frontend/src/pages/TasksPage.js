@@ -526,7 +526,7 @@ export default function TasksPage() {
                 )}
                 
                 {/* Task Card */}
-                <div className={`flex-1 ${selectMode ? 'pointer-events-none' : ''}`}>
+                <div className="flex-1">
                   <TaskCard 
                     task={task} 
                     onClick={selectMode ? () => toggleTaskSelection(task.id) : () => navigate(`/tasks/${task.id}`)}
