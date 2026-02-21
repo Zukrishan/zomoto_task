@@ -149,7 +149,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     if (!titleValue?.trim()) return;
     
     try {
-      await api.post('/task-templates', { name: titleValue });
+      await api.post('/task-templates', { title: titleValue });
       toast.success('Task added to library');
       fetchTemplates();
     } catch (error) {
