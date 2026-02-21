@@ -236,16 +236,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
       handleClose();
       onSuccess();
     } catch (error) {
-      const errorDetail = error.response?.data?.detail;
-      if (Array.isArray(errorDetail)) {
-        // Handle Pydantic validation errors
-        const errorMsg = errorDetail.map(e => e.msg || e.message).join(', ');
-        toast.error(errorMsg || 'Validation error');
-      } else if (typeof errorDetail === 'string') {
-        toast.error(errorDetail);
-      } else {
-        toast.error('Failed to create task');
-      }
+      toast.error(getErrorMessage(error, 'Failed to create task'));
     } finally {
       setLoading(false);
     }
