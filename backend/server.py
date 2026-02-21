@@ -157,6 +157,20 @@ class RecurrenceType:
     DAILY = "DAILY"
     MONTHLY = "MONTHLY"
 
+
+def normalize_status(value: Optional[str]) -> str:
+    if value is None:
+        return TaskStatus.PENDING
+    normalized = str(value).strip().upper().replace('-', '_').replace(' ', '_')
+    valid_statuses = {
+        TaskStatus.PENDING,
+        TaskStatus.IN_PROGRESS,
+        TaskStatus.COMPLETED,
+        TaskStatus.NOT_COMPLETED,
+        TaskStatus.VERIFIED,
+    }
+    return normalized if normalized in valid_statuses else TaskStatus.PENDING
+
 # ============== Pydantic Models ==============
 
 class UserCreate(BaseModel):
@@ -547,7 +561,7 @@ def task_to_response(task: dict) -> TaskResponse:
         allocated_datetime=task.get("allocated_datetime"),
         deadline=task.get("deadline"),
         start_time=task.get("start_time"),
-        status=task.get("status", "PENDING"),
+        status=normalize_status(task.get("status", "PENDING")),
         created_by=task.get("created_by", ""),
         created_by_name=task.get("created_by_name", ""),
         assigned_to=task.get("assigned_to"),
@@ -913,7 +927,7 @@ async def get_tasks(status: Optional[str] = None, assigned_to: Optional[str] = N
         query["assigned_to"] = assigned_to
     
     if status:
-        query["status"] = status
+        query["status"] = normalize_status(status)
     if category:
         query["category"] = category
     if priority:
@@ -926,7 +940,8 @@ async def get_tasks(status: Optional[str] = None, assigned_to: Optional[str] = N
     for task in tasks:
         if is_recurring_task_active(task):
             # Check and update overdue status
-            if is_task_overdue(task) and task["status"] not in [TaskStatus.NOT_COMPLETED, TaskStatus.COMPLETED, TaskStatus.VERIFIED]:
+            task_status = normalize_status(task.get("status"))
+            if is_task_overdue(task) and task_status not in [TaskStatus.NOT_COMPLETED, TaskStatus.COMPLETED, TaskStatus.VERIFIED]:
                 await db.tasks.update_one({"id": task["id"]}, {"$set": {"status": TaskStatus.NOT_COMPLETED}})
                 task["status"] = TaskStatus.NOT_COMPLETED
             active_tasks.append(task_to_response(task))
@@ -996,7 +1011,7 @@ async def start_task(task_id: str, current_user: dict = Depends(get_current_user
     if current_user["role"] == "STAFF" and task.get("assigned_to") != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    if task["status"] != TaskStatus.PENDING:
+    if normalize_status(task.get("status")) != TaskStatus.PENDING:
         raise HTTPException(status_code=400, detail="Task can only be started from PENDING status")
     
     now = datetime.now(timezone.utc)
@@ -1022,7 +1037,7 @@ async def complete_task(task_id: str, current_user: dict = Depends(get_current_u
     if current_user["role"] == "STAFF" and task.get("assigned_to") != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    if task["status"] != TaskStatus.IN_PROGRESS:
+    if normalize_status(task.get("status")) != TaskStatus.IN_PROGRESS:
         raise HTTPException(status_code=400, detail="Task can only be completed from IN_PROGRESS status")
     
     # Check if proof photos exist
@@ -1052,7 +1067,7 @@ async def verify_task(task_id: str, current_user: dict = Depends(require_roles([
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    if task["status"] != TaskStatus.COMPLETED:
+    if normalize_status(task.get("status")) != TaskStatus.COMPLETED:
         raise HTTPException(status_code=400, detail="Only completed tasks can be verified")
     
     now = datetime.now(timezone.utc)
@@ -1106,7 +1121,7 @@ async def upload_proof_photo(task_id: str, file: UploadFile = File(...), current
     if current_user["role"] == "STAFF" and task.get("assigned_to") != current_user["id"]:
         raise HTTPException(status_code=403, detail="Access denied")
     
-    if task["status"] not in [TaskStatus.IN_PROGRESS, TaskStatus.PENDING]:
+    if normalize_status(task.get("status")) not in [TaskStatus.IN_PROGRESS, TaskStatus.PENDING]:
         raise HTTPException(status_code=400, detail="Can only upload proof for pending or in-progress tasks")
     
     # Save file

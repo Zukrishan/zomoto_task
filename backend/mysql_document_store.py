@@ -1,5 +1,6 @@
 import json
 import re
+import uuid
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
@@ -123,6 +124,9 @@ class MySQLDocumentDB:
 
     async def _insert_doc(self, collection: str, document: Dict[str, Any]):
         doc_id = document.get("id")
+        if not doc_id:
+            doc_id = str(uuid.uuid4())
+            document["id"] = doc_id
         async with self.pool.acquire() as conn:
             async with conn.cursor() as cur:
                 await cur.execute(
