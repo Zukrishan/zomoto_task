@@ -456,7 +456,7 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
                       onClick={() => handleTemplateSelect(template)}
                       data-testid={`template-option-${template.id}`}
                     >
-                      {template.name}
+                      {template.title}
                     </div>
                   ))}
                   {showAddToLibrary && (
