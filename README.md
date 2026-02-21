@@ -11,53 +11,64 @@ A production-ready, mobile-first restaurant task management system built with Re
 | Manager | manager@zomoto.lk | 123456 |
 | Staff | staff@zomoto.lk | 123456 |
 
-## 📊 Database Connection (MySQL)
+## 📊 Database Connection (MongoDB)
 
 ### Connection Details
 ```
 Host: localhost
 Database: zomoto_tasks
-Port: 3306
+Port: 27017
 ```
 
 ### Connection String
 ```
-mysql://root:password@localhost:3306/zomoto_tasks
+mongodb://localhost:27017/zomoto_tasks
 ```
 
 ### Connect via Command Line
 ```bash
-mysql -u root -p zomoto_tasks
+mongosh zomoto_tasks
 ```
 
-### View Tables
+### View Collections
 ```bash
-mysql -u root -p -D zomoto_tasks -e "SHOW TABLES;"
+mongosh zomoto_tasks --eval "db.getCollectionNames()"
 ```
 
-### Database Tables
-| Table | Description |
-|-------|-------------|
-| documents | Generic JSON document storage table for application collections |
+### Database Collections
+| Collection | Description |
+|------------|-------------|
+| users | User accounts (Owner, Manager, Staff) |
+| tasks | Task records with status tracking |
+| task_templates | Task library templates |
+| task_comments | Comments on tasks |
+| task_attachments | File attachments (images, documents) |
+| task_activity_logs | Audit trail for all task changes |
+| categories | Task categories with colors |
+| notifications | In-app notifications |
+| push_subscriptions | Web push subscriptions |
+| notification_logs | SMS/Push notification logs |
 
-### Sample Queries (MySQL)
-```sql
--- View all user documents
-SELECT JSON_EXTRACT(data, "$.email") AS email
-FROM documents
-WHERE collection_name = "users";
+### Sample Queries (MongoDB Shell)
+```javascript
+// View all users
+db.users.find({}, {password: 0})
 
--- View all task documents
-SELECT data
-FROM documents
-WHERE collection_name = "tasks";
+// View all tasks
+db.tasks.find({})
+
+// View tasks by status
+db.tasks.find({status: "COMPLETED"})
+
+// Count tasks per status
+db.tasks.aggregate([{$group: {_id: "$status", count: {$sum: 1}}}])
 ```
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 19, Tailwind CSS, Shadcn UI
 - **Backend**: FastAPI, SQLAlchemy
-- **Database**: MySQL
+- **Database**: MongoDB
 - **Auth**: JWT with role-based access control
 - **Font**: DM Sans
 
@@ -86,11 +97,8 @@ WHERE collection_name = "tasks";
 
 ### Backend (.env)
 ```env
-MYSQL_HOST=localhost
-MYSQL_PORT=3306
-MYSQL_USER=root
-MYSQL_PASSWORD=your-password
-MYSQL_DATABASE=zomoto_tasks
+MONGO_URL=mongodb://localhost:27017
+DB_NAME=zomoto_tasks
 JWT_SECRET=your-secret-key
 CORS_ORIGINS=*
 NOTIFY_LK_USER_ID=your-notify-user-id
@@ -221,7 +229,3 @@ Get credentials at: https://www.notify.lk/
 - [ ] AI task suggestions
 - [ ] Payroll integration
 - [ ] Multi-restaurant support
-
-## 📄 License
-
-Proprietary - Zomoto Tasks © 2026

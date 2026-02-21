@@ -17,13 +17,15 @@ import aiofiles
 from PIL import Image
 import asyncio
 import json
-from mysql_document_store import create_mysql_document_db
+from motor.motor_asyncio import AsyncIOMotorClient
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MySQL-backed document DB connection (Mongo-compatible access patterns)
-db = None
+# MongoDB connection
+mongo_url = os.environ['MONGO_URL']
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ['DB_NAME']]
 
 # JWT Configuration
 SECRET_KEY = os.environ.get('JWT_SECRET', 'zomoto-tasks-secret-key-2024')
@@ -1367,7 +1369,7 @@ async def seed_data():
 
 @api_router.get("/health")
 async def health_check():
-    return {"status": "healthy", "database": "MySQL", "timestamp": datetime.now(timezone.utc).isoformat()}
+    return {"status": "healthy", "database": "MongoDB", "timestamp": datetime.now(timezone.utc).isoformat()}
 
 # Include router
 app.include_router(api_router)
@@ -1383,18 +1385,9 @@ app.add_middleware(
 # Start background task on startup
 @app.on_event("startup")
 async def startup_event():
-    global db
-    db = await create_mysql_document_db(
-        host=os.environ.get("MYSQL_HOST", "localhost"),
-        port=int(os.environ.get("MYSQL_PORT", "3306")),
-        user=os.environ["MYSQL_USER"],
-        password=os.environ["MYSQL_PASSWORD"],
-        db_name=os.environ["MYSQL_DATABASE"],
-    )
     asyncio.create_task(check_overdue_tasks())
     asyncio.create_task(check_recurring_tasks_activation())
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
-    if db is not None:
-        await db.close()
+    client.close()
