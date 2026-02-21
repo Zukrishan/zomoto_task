@@ -308,6 +308,9 @@ class TemplateResponse(BaseModel):
 class CommentCreate(BaseModel):
     content: str
 
+class BulkDeleteRequest(BaseModel):
+    task_ids: List[str]
+
 class CommentResponse(BaseModel):
     id: str
     task_id: str
