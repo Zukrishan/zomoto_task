@@ -15,6 +15,16 @@ const STATUS_CONFIG = {
   VERIFIED: { label: 'Verified', color: 'bg-purple-100 text-purple-700' },
 };
 
+const formatStatusLabel = (status) => {
+  if (!status) return 'Unknown';
+  return status
+    .toString()
+    .trim()
+    .replace(/_/g, ' ')
+    .toLowerCase()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+};
+
 const PRIORITY_CONFIG = {
   HIGH: { color: 'border-l-red-500' },
   MEDIUM: { color: 'border-l-amber-500' },
@@ -32,11 +42,17 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
   const longPressTimer = useRef(null);
   const isLongPress = useRef(false);
   
+  const normalizedStatus = (task.status || '').toString().trim().toUpperCase();
+  const statusMeta = STATUS_CONFIG[normalizedStatus] || {
+    label: formatStatusLabel(task.status),
+    color: 'bg-zinc-100 text-zinc-700',
+  };
+
   // Use the is_overdue flag from backend or check deadline
   const isOverdue = task.is_overdue || (task.deadline && new Date(task.deadline) < new Date() && 
-    !['COMPLETED', 'VERIFIED', 'NOT_COMPLETED'].includes(task.status));
+    !['COMPLETED', 'VERIFIED', 'NOT_COMPLETED'].includes(normalizedStatus));
   
-  const isNotCompleted = task.status === 'NOT_COMPLETED';
+  const isNotCompleted = normalizedStatus === 'NOT_COMPLETED';
   const isRecurring = task.task_type === 'RECURRING';
   
   // Role checks
@@ -47,10 +63,10 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
   const canSelect = isOwner || isManager;
   
   // Action visibility
-  const canStart = task.status === 'PENDING' && isAssignedToMe;
-  const canUploadProof = task.status === 'IN_PROGRESS' && isAssignedToMe;
-  const canComplete = task.status === 'IN_PROGRESS' && isAssignedToMe && task.proof_photos?.length > 0;
-  const canVerify = task.status === 'COMPLETED' && (isOwner || isManager);
+  const canStart = normalizedStatus === 'PENDING' && isAssignedToMe;
+  const canUploadProof = normalizedStatus === 'IN_PROGRESS' && isAssignedToMe;
+  const canComplete = normalizedStatus === 'IN_PROGRESS' && isAssignedToMe && task.proof_photos?.length > 0;
+  const canVerify = normalizedStatus === 'COMPLETED' && (isOwner || isManager);
   const hasProofPhotos = task.proof_photos && task.proof_photos.length > 0;
 
   // Long press handlers for touch devices
@@ -238,8 +254,8 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
               </p>
             )}
           </div>
-          <Badge className={STATUS_CONFIG[task.status]?.color} data-testid="task-card-status">
-            {STATUS_CONFIG[task.status]?.label}
+          <Badge className={statusMeta.color} data-testid="task-card-status">
+            {statusMeta.label}
           </Badge>
         </div>
 
@@ -346,7 +362,7 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
             )}
 
             {/* Cannot complete without proof hint */}
-            {task.status === 'IN_PROGRESS' && isAssignedToMe && !hasProofPhotos && (
+            {normalizedStatus === 'IN_PROGRESS' && isAssignedToMe && !hasProofPhotos && (
               <span className="text-xs text-amber-600 ml-2">
                 Upload proof to complete
               </span>

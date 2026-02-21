@@ -14,17 +14,26 @@ export function WebSocketProvider({ children }) {
   // Get WebSocket URL from backend URL
   const getWsUrl = useCallback(() => {
     const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+
+    // Normalize configured base URL to avoid malformed websocket paths
+    // e.g. https://host/api -> https://host, and trim trailing slashes
+    const normalizedBaseUrl = backendUrl
+      .trim()
+      .replace(/\/+$/, '')
+      .replace(/\/api$/, '');
+
     // Convert http(s) to ws(s)
-    const wsUrl = backendUrl.replace(/^http/, 'ws');
-    // Use /api/ws to route through the ingress proxy
-    return `${wsUrl}/api/ws/${token}`;
+    const wsBaseUrl = normalizedBaseUrl.replace(/^http/, 'ws');
+
+    // Use /api/ws to route through ingress/reverse proxies
+    return `${wsBaseUrl}/api/ws/${encodeURIComponent(token)}`;
   }, [token]);
 
   const connect = useCallback(() => {
     if (!token || !isAuthenticated) return;
     
-    // Don't create new connection if already connected
-    if (ws.current?.readyState === WebSocket.OPEN) return;
+    // Don't create new connection if already connected/connecting
+    if (ws.current?.readyState === WebSocket.OPEN || ws.current?.readyState === WebSocket.CONNECTING) return;
 
     try {
       const wsUrl = getWsUrl();
@@ -70,8 +79,9 @@ export function WebSocketProvider({ children }) {
         ws.current = null;
         
         // Reconnect after delay (only if still authenticated)
-        if (isAuthenticated && event.code !== 4001) {
+        if (isAuthenticated && event.code !== 4001 && !reconnectTimer.current) {
           reconnectTimer.current = setTimeout(() => {
+            reconnectTimer.current = null;
             console.log('Attempting to reconnect...');
             connect();
           }, 3000);
