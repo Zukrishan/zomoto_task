@@ -999,8 +999,9 @@ async def delete_task(task_id: str, db: Session = Depends(get_db),
     return {"message": "Task deleted"}
 
 @api_router.post("/tasks/bulk-delete")
-async def bulk_delete_tasks(task_ids: List[str], db: Session = Depends(get_db),
+async def bulk_delete_tasks(request: BulkDeleteRequest, db: Session = Depends(get_db),
                             current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    task_ids = request.task_ids
     db.query(Task).filter(Task.id.in_(task_ids)).update({"is_deleted": True}, synchronize_session=False)
     db.commit()
     
