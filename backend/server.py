@@ -683,6 +683,16 @@ def delete_template(template_id: str, db: Session = Depends(get_db),
 
 # ===================== TASK ENDPOINTS =====================
 def task_to_response(task: Task) -> dict:
+    def format_datetime(dt):
+        """Format datetime to ISO string with UTC timezone"""
+        if dt is None:
+            return None
+        # Ensure we return UTC format with Z suffix
+        iso = dt.isoformat()
+        if not iso.endswith('Z') and '+' not in iso:
+            iso += 'Z'  # Add Z to indicate UTC
+        return iso
+    
     return {
         "id": task.id,
         "title": task.title,
@@ -693,8 +703,8 @@ def task_to_response(task: Task) -> dict:
         "task_type": task.task_type,
         "time_interval": task.time_interval,
         "time_unit": task.time_unit,
-        "allocated_datetime": task.allocated_datetime.isoformat() if task.allocated_datetime else None,
-        "deadline": task.deadline.isoformat() if task.deadline else None,
+        "allocated_datetime": format_datetime(task.allocated_datetime),
+        "deadline": format_datetime(task.deadline),
         "recurrence_pattern": task.recurrence_pattern,
         "recurrence_intervals": task.recurrence_intervals or [],
         "proof_photos": task.proof_photos or [],
@@ -703,12 +713,12 @@ def task_to_response(task: Task) -> dict:
         "assigned_to_name": task.assigned_to_name,
         "created_by": task.created_by,
         "created_by_name": task.created_by_name,
-        "started_at": task.started_at.isoformat() if task.started_at else None,
-        "completed_at": task.completed_at.isoformat() if task.completed_at else None,
-        "verified_at": task.verified_at.isoformat() if task.verified_at else None,
+        "started_at": format_datetime(task.started_at),
+        "completed_at": format_datetime(task.completed_at),
+        "verified_at": format_datetime(task.verified_at),
         "is_overdue": task.is_overdue,
-        "created_at": task.created_at.isoformat() if task.created_at else None,
-        "updated_at": task.updated_at.isoformat() if task.updated_at else None
+        "created_at": format_datetime(task.created_at),
+        "updated_at": format_datetime(task.updated_at)
     }
 
 @api_router.get("/tasks")
