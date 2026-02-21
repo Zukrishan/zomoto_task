@@ -1243,7 +1243,51 @@ async def check_overdue_tasks():
 @app.on_event("startup")
 async def startup_event():
     logger.info("Starting Zomoto Tasks API with MySQL...")
+    seed_default_data()
     asyncio.create_task(check_overdue_tasks())
+
+def seed_default_data():
+    """Seed default users and categories if they don't exist."""
+    db = SessionLocal()
+    try:
+        # Seed default users
+        default_users = [
+            {"name": "Owner", "email": "owner@zomoto.lk", "role": "OWNER", "password": "123456"},
+            {"name": "Manager", "email": "manager@zomoto.lk", "role": "MANAGER", "password": "123456"},
+            {"name": "Staff", "email": "staff@zomoto.lk", "role": "STAFF", "password": "123456"},
+        ]
+        for u in default_users:
+            existing = db.query(User).filter(User.email == u["email"]).first()
+            if not existing:
+                user = User(
+                    name=u["name"],
+                    email=u["email"],
+                    role=u["role"],
+                    hashed_password=get_password_hash(u["password"])
+                )
+                db.add(user)
+                logger.info(f"Seeded user: {u['email']}")
+
+        # Seed default categories
+        default_categories = [
+            {"name": "Kitchen", "color": "#EF4444"},
+            {"name": "Cleaning", "color": "#3B82F6"},
+            {"name": "Maintenance", "color": "#F59E0B"},
+            {"name": "Other", "color": "#6B7280"},
+        ]
+        for c in default_categories:
+            existing = db.query(Category).filter(Category.name == c["name"]).first()
+            if not existing:
+                cat = Category(name=c["name"], color=c["color"])
+                db.add(cat)
+                logger.info(f"Seeded category: {c['name']}")
+
+        db.commit()
+    except Exception as e:
+        logger.error(f"Error seeding data: {e}")
+        db.rollback()
+    finally:
+        db.close()
 
 # Include API router
 app.include_router(api_router)
