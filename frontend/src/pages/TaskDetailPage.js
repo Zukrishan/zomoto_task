@@ -193,7 +193,7 @@ export default function TaskDetailPage() {
       toast.success(`Task marked as ${newStatus.replace('_', ' ').toLowerCase()}`);
       fetchTaskData();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to update status');
+      toast.error(getErrorMessage(error, 'Failed to update status'));
     } finally {
       setUpdating(false);
     }
@@ -206,7 +206,7 @@ export default function TaskDetailPage() {
       toast.success('Task started');
       fetchTaskData();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to start task');
+      toast.error(getErrorMessage(error, 'Failed to start task'));
     } finally {
       setUpdating(false);
     }
@@ -224,7 +224,7 @@ export default function TaskDetailPage() {
       toast.success('Task completed');
       fetchTaskData();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to complete task');
+      toast.error(getErrorMessage(error, 'Failed to complete task'));
     } finally {
       setUpdating(false);
     }
@@ -237,7 +237,7 @@ export default function TaskDetailPage() {
       toast.success('Task verified successfully');
       fetchTaskData();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to verify task');
+      toast.error(getErrorMessage(error, 'Failed to verify task'));
     } finally {
       setUpdating(false);
     }
