@@ -846,6 +846,9 @@ async def update_task(task_id: str, task_data: TaskUpdate, db: Session = Depends
     # Recalculate deadline if time changed
     if "time_interval" in update_fields or "time_unit" in update_fields or "allocated_datetime" in update_fields:
         allocated = update_fields.get("allocated_datetime", task.allocated_datetime)
+        # Strip timezone info for MySQL compatibility
+        if allocated and hasattr(allocated, 'tzinfo') and allocated.tzinfo is not None:
+            allocated = allocated.replace(tzinfo=None)
         interval = update_fields.get("time_interval", task.time_interval)
         unit = update_fields.get("time_unit", task.time_unit)
         
@@ -854,6 +857,11 @@ async def update_task(task_id: str, task_data: TaskUpdate, db: Session = Depends
         else:
             task.deadline = allocated + timedelta(minutes=interval)
     
+    # Strip timezone from allocated_datetime in update_fields
+    if "allocated_datetime" in update_fields and update_fields["allocated_datetime"]:
+        if update_fields["allocated_datetime"].tzinfo is not None:
+            update_fields["allocated_datetime"] = update_fields["allocated_datetime"].replace(tzinfo=None)
+
     for key, value in update_fields.items():
         if value is not None:
             setattr(task, key, value)
