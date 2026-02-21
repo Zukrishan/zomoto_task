@@ -106,18 +106,18 @@ export default function TaskDetailPage() {
 
   const fetchTaskData = useCallback(async () => {
     try {
-      const [taskRes, commentsRes, activityRes, attachmentsRes] = await Promise.all([
+      const [taskRes, commentsRes, activityRes] = await Promise.all([
         api.get(`/tasks/${taskId}`),
         api.get(`/tasks/${taskId}/comments`),
         api.get(`/tasks/${taskId}/activity`),
-        api.get(`/tasks/${taskId}/attachments`),
       ]);
       setTask(taskRes.data);
       setComments(commentsRes.data);
       setActivityLog(activityRes.data);
-      setAttachments(attachmentsRes.data);
+      // Attachments are stored in the task object itself
+      setAttachments(taskRes.data.attachments || []);
     } catch (error) {
-      toast.error('Failed to load task');
+      toast.error(getErrorMessage(error, 'Failed to load task'));
       navigate('/tasks');
     } finally {
       setLoading(false);
