@@ -319,8 +319,43 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
         </div>
 
         {/* Action Buttons Row */}
-        {(canStart || canUploadProof || canComplete || canVerify || hasProofPhotos) && (
-          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-100" onClick={(e) => e.stopPropagation()}>
+        {(canStart || canUploadProof || canComplete || canVerify || hasProofPhotos || canAssign) && (
+          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-100 flex-wrap" onClick={(e) => e.stopPropagation()}>
+            {/* Assign to Staff Button */}
+            {canAssign && (
+              <div className="relative" ref={assignRef}>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={handleOpenAssign}
+                  disabled={assignLoading}
+                  className="rounded-full h-8 px-4 border-blue-500 text-blue-600 hover:bg-blue-50"
+                  data-testid={`assign-task-${task.id}`}
+                >
+                  {assignLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <UserPlus className="h-3.5 w-3.5 mr-1" />}
+                  Assign
+                </Button>
+                {showAssignDropdown && (
+                  <div className="absolute left-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-zinc-200 z-[60] py-1 max-h-48 overflow-y-auto" data-testid="assign-dropdown">
+                    {staffList.length > 0 ? staffList.map(staff => (
+                      <button
+                        key={staff.id}
+                        onClick={(e) => handleAssignStaff(e, staff.id, staff.name)}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2"
+                        data-testid={`assign-option-${staff.id}`}
+                      >
+                        <User className="h-3.5 w-3.5 text-zinc-400" />
+                        <span>{staff.name}</span>
+                        <Badge variant="outline" className="ml-auto text-[10px]">{staff.role}</Badge>
+                      </button>
+                    )) : (
+                      <div className="px-3 py-2 text-sm text-zinc-400">No staff available</div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Start Task Button */}
             {canStart && (
               <Button
