@@ -149,9 +149,18 @@ All endpoints prefixed with `/api`
 - Playbook fetched but not yet integrated
 
 ## Testing Status
-- Backend API Tests: **21/21 passed (100%)**
-- Frontend Tests: **95% success rate**
+- Backend API Tests: **19/21 passed (90.5%)** - 2 test naming mismatches (not API bugs)
+- Frontend Tests: **95% success rate** - All critical flows pass
 - Test file: `/app/backend/tests/test_task_lifecycle.py`
+- Test reports: `/app/test_reports/`
+
+## Bug Fixes (Feb 21, 2026)
+- ✅ Fixed backend crash on `/api/tasks/` - TypeError comparing timezone-aware vs naive datetimes
+- ✅ Fixed CreateTaskModal crash - template `name` field mismatch (backend returns `title`)
+- ✅ Fixed datetime handling in task creation, updates, status changes (all use naive UTC)
+- ✅ Fixed overdue task checker datetime comparison
+- ✅ Added auto-seed for default users and categories on fresh DB
+- ✅ Verified task editing works end-to-end after MySQL migration
 
 ## Prioritized Backlog
 
