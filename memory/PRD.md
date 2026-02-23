@@ -191,8 +191,8 @@ All endpoints prefixed with `/api`
 
 ## Technical Stack
 - **Frontend**: React 18, React Router 6, TailwindCSS, shadcn/ui
-- **Backend**: FastAPI, Pydantic, Motor (async MongoDB driver)
-- **Database**: MongoDB
+- **Backend**: FastAPI, Pydantic, SQLAlchemy ORM
+- **Database**: MySQL/MariaDB (migrated from MongoDB)
 - **Authentication**: JWT with RBAC
 - **Architecture**: Full-stack monolith, PWA-ready
 
