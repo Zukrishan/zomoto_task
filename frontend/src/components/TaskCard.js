@@ -57,6 +57,49 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
   const canComplete = task.status === 'IN_PROGRESS' && isAssignedToMe && task.proof_photos?.length > 0;
   const canVerify = task.status === 'COMPLETED' && (isOwner || isManager);
   const hasProofPhotos = task.proof_photos && task.proof_photos.length > 0;
+  const canAssign = (isOwner || isManager) && !task.assigned_to && task.status === 'PENDING';
+
+  // Close assign dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (assignRef.current && !assignRef.current.contains(e.target)) {
+        setShowAssignDropdown(false);
+      }
+    };
+    if (showAssignDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showAssignDropdown]);
+
+  const handleOpenAssign = async (e) => {
+    e.stopPropagation();
+    if (staffList.length === 0) {
+      try {
+        const response = await api.get('/users/staff');
+        setStaffList(response.data);
+      } catch (error) {
+        toast.error('Failed to load staff list');
+        return;
+      }
+    }
+    setShowAssignDropdown(true);
+  };
+
+  const handleAssignStaff = async (e, staffId, staffName) => {
+    e.stopPropagation();
+    setAssignLoading(true);
+    try {
+      await api.put(`/tasks/${task.id}`, { assigned_to: staffId });
+      toast.success(`Assigned to ${staffName}`);
+      setShowAssignDropdown(false);
+      onTaskUpdate?.();
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to assign staff'));
+    } finally {
+      setAssignLoading(false);
+    }
+  };
 
   // Long press handlers for touch devices
   const handleTouchStart = useCallback((e) => {
