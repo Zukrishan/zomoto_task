@@ -23,8 +23,13 @@ import asyncio
 import json
 import enum
 
+import subprocess
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Ensure MySQL is installed and running before connecting
+subprocess.run([str(ROOT_DIR / 'ensure_mysql.sh')], timeout=120)
 
 # MySQL Configuration
 MYSQL_URL = os.environ.get('MYSQL_URL', 'mysql+pymysql://root@localhost/zomoto_tasks?unix_socket=/run/mysqld/mysqld.sock')
