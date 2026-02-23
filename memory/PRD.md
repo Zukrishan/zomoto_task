@@ -34,7 +34,9 @@ Build a production-ready, mobile-first restaurant task management system called 
 
 ## What's Been Implemented
 
-### Backend (FastAPI + MongoDB)
+### Backend (FastAPI + MySQL/MariaDB via SQLAlchemy)
+- ✅ Migrated from MongoDB to MySQL using SQLAlchemy ORM
+- ✅ Auto-seed default users (Owner, Manager, Staff) and categories on startup
 - ✅ User CRUD with role-based access control (OWNER, MANAGER, STAFF)
 - ✅ JWT Authentication with 24-hour token expiry
 - ✅ New Task Lifecycle (PENDING, IN_PROGRESS, COMPLETED, NOT_COMPLETED, VERIFIED)
