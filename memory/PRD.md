@@ -162,6 +162,12 @@ All endpoints prefixed with `/api`
 - ✅ Added auto-seed for default users and categories on fresh DB
 - ✅ Verified task editing works end-to-end after MySQL migration
 
+## Features & Fixes (Feb 23, 2026)
+- ✅ Added MySQL auto-start script (`ensure_mysql.sh`) so MySQL persists across environment restarts
+- ✅ Added "Assign to Staff" button on unassigned task cards — shows staff dropdown for quick assignment
+- ✅ Fixed "Mark all read" notifications — frontend called `PUT /notifications/read-all` but backend had `POST /notifications/mark-all-read`
+- ✅ Fixed single notification mark-read — added `PUT /notifications/{id}/read` endpoint
+
 ## Prioritized Backlog
 
 ### P0 (Critical) - DONE
