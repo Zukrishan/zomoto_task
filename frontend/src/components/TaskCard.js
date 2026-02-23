@@ -239,8 +239,8 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
               </p>
             )}
           </div>
-          <Badge className={STATUS_CONFIG[task.status]?.color} data-testid="task-card-status">
-            {STATUS_CONFIG[task.status]?.label}
+          <Badge className={(STATUS_CONFIG[task.status]?.color || 'bg-zinc-100 text-zinc-700')} data-testid="task-card-status">
+            {(STATUS_CONFIG[task.status]?.label || task.status || 'Unknown')}
           </Badge>
         </div>
 

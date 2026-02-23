@@ -236,6 +236,7 @@ class TaskUpdate(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     priority: Optional[str] = None
+    status: Optional[str] = None
     assigned_to: Optional[str] = None
     time_interval: Optional[int] = None
     time_unit: Optional[str] = None
@@ -692,6 +693,27 @@ def task_to_response(task: Task) -> dict:
         if not iso.endswith('Z') and '+' not in iso:
             iso += 'Z'  # Add Z to indicate UTC
         return iso
+
+    def normalize_attachments(raw_attachments):
+        if not raw_attachments:
+            return []
+        normalized = []
+        for item in raw_attachments:
+            if isinstance(item, dict):
+                normalized.append(item)
+            elif isinstance(item, str):
+                filename = item.split('/')[-1] if '/' in item else item
+                normalized.append({
+                    "id": str(uuid.uuid4()),
+                    "filename": filename,
+                    "content_type": None,
+                    "url": item,
+                    "thumbnail_url": None,
+                    "uploaded_by": None,
+                    "uploaded_by_name": "Unknown",
+                    "created_at": format_datetime(task.updated_at) or format_datetime(task.created_at)
+                })
+        return normalized
     
     return {
         "id": task.id,
@@ -708,12 +730,13 @@ def task_to_response(task: Task) -> dict:
         "recurrence_pattern": task.recurrence_pattern,
         "recurrence_intervals": task.recurrence_intervals or [],
         "proof_photos": task.proof_photos or [],
-        "attachments": task.attachments or [],
+        "attachments": normalize_attachments(task.attachments),
         "assigned_to": task.assigned_to,
         "assigned_to_name": task.assigned_to_name,
         "created_by": task.created_by,
         "created_by_name": task.created_by_name,
         "started_at": format_datetime(task.started_at),
+        "start_time": format_datetime(task.started_at),
         "completed_at": format_datetime(task.completed_at),
         "verified_at": format_datetime(task.verified_at),
         "is_overdue": task.is_overdue,
@@ -820,6 +843,20 @@ async def create_task(task_data: TaskCreate, db: Session = Depends(get_db),
     
     return task_to_response(task)
 
+@api_router.post("/tasks/bulk-delete")
+async def bulk_delete_tasks(request: BulkDeleteRequest, db: Session = Depends(get_db),
+                            current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    task_ids = request.task_ids
+    db.query(Task).filter(Task.id.in_(task_ids)).update({"is_deleted": True}, synchronize_session=False)
+    db.commit()
+
+    await manager.broadcast_to_all({
+        "type": "tasks_deleted",
+        "data": {"ids": task_ids}
+    })
+
+    return {"message": f"Deleted {len(task_ids)} tasks"}
+
 @api_router.get("/tasks/{task_id}")
 def get_task(task_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
@@ -861,6 +898,30 @@ async def update_task(task_id: str, task_data: TaskUpdate, db: Session = Depends
     if "allocated_datetime" in update_fields and update_fields["allocated_datetime"]:
         if update_fields["allocated_datetime"].tzinfo is not None:
             update_fields["allocated_datetime"] = update_fields["allocated_datetime"].replace(tzinfo=None)
+
+    # Handle status updates explicitly (TaskDetail uses PUT /tasks/{id} with {status})
+    if "status" in update_fields and update_fields["status"]:
+        new_status = update_fields["status"]
+        valid_statuses = {"PENDING", "IN_PROGRESS", "COMPLETED", "NOT_COMPLETED", "VERIFIED"}
+        if new_status not in valid_statuses:
+            raise HTTPException(status_code=400, detail="Invalid task status")
+
+        if new_status == "VERIFIED":
+            if current_user.role not in ["OWNER", "MANAGER"]:
+                raise HTTPException(status_code=403, detail="Only managers can verify tasks")
+            task.verified_at = datetime.utcnow()
+            task.verified_by = current_user.id
+        elif new_status == "COMPLETED":
+            if task.assigned_to and task.assigned_to != current_user.id and current_user.role not in ["OWNER", "MANAGER"]:
+                raise HTTPException(status_code=403, detail="You are not assigned to this task")
+            if not task.proof_photos or len(task.proof_photos) == 0:
+                raise HTTPException(status_code=400, detail="Proof photo required before completing")
+            task.completed_at = datetime.utcnow()
+        elif new_status == "IN_PROGRESS":
+            if task.assigned_to and task.assigned_to != current_user.id and current_user.role not in ["OWNER", "MANAGER"]:
+                raise HTTPException(status_code=403, detail="You are not assigned to this task")
+            if not task.started_at:
+                task.started_at = datetime.utcnow()
 
     for key, value in update_fields.items():
         if value is not None:
@@ -1004,6 +1065,67 @@ async def upload_proof(task_id: str, file: UploadFile = File(...), db: Session =
     
     return {"message": "Proof uploaded", "url": proof_url, "task": task_to_response(task)}
 
+@api_router.post("/tasks/{task_id}/attachments")
+async def upload_attachment(task_id: str, file: UploadFile = File(...), db: Session = Depends(get_db),
+                            current_user: User = Depends(get_current_user)):
+    task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    uploads_dir = ROOT_DIR / "uploads" / "attachments"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+
+    file_ext = Path(file.filename).suffix
+    filename = f"{task_id}_{uuid.uuid4().hex[:8]}{file_ext}"
+    file_path = uploads_dir / filename
+
+    async with aiofiles.open(file_path, 'wb') as f:
+        content = await file.read()
+        await f.write(content)
+
+    file_url = f"/api/uploads/attachments/{filename}"
+    thumbnail_url = None
+
+    if file.content_type and file.content_type.startswith("image/"):
+        try:
+            thumb_filename = f"thumb_{filename}"
+            thumb_path = uploads_dir / thumb_filename
+            with Image.open(file_path) as img:
+                img.thumbnail((400, 400))
+                img.save(thumb_path)
+            thumbnail_url = f"/api/uploads/attachments/{thumb_filename}"
+        except Exception as e:
+            logger.warning(f"Failed to generate attachment thumbnail: {e}")
+
+    attachment = {
+        "id": str(uuid.uuid4()),
+        "filename": file.filename,
+        "content_type": file.content_type,
+        "url": file_url,
+        "thumbnail_url": thumbnail_url,
+        "uploaded_by": current_user.id,
+        "uploaded_by_name": current_user.name,
+        "created_at": datetime.utcnow().isoformat() + "Z"
+    }
+
+    attachments = task.attachments or []
+    if not isinstance(attachments, list):
+        attachments = []
+    attachments.append(attachment)
+    task.attachments = attachments
+
+    db.commit()
+    db.refresh(task)
+
+    create_activity_log(db, task.id, current_user.id, current_user.name, "ATTACHMENT_UPLOADED", f"File uploaded: {file.filename}")
+
+    await manager.broadcast_to_all({
+        "type": "task_update",
+        "data": task_to_response(task)
+    })
+
+    return {"message": "Attachment uploaded", "attachment": attachment, "task": task_to_response(task)}
+
 @api_router.delete("/tasks/{task_id}")
 async def delete_task(task_id: str, db: Session = Depends(get_db),
                       current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
@@ -1020,20 +1142,6 @@ async def delete_task(task_id: str, db: Session = Depends(get_db),
     })
     
     return {"message": "Task deleted"}
-
-@api_router.post("/tasks/bulk-delete")
-async def bulk_delete_tasks(request: BulkDeleteRequest, db: Session = Depends(get_db),
-                            current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
-    task_ids = request.task_ids
-    db.query(Task).filter(Task.id.in_(task_ids)).update({"is_deleted": True}, synchronize_session=False)
-    db.commit()
-    
-    await manager.broadcast_to_all({
-        "type": "tasks_deleted",
-        "data": {"ids": task_ids}
-    })
-    
-    return {"message": f"Deleted {len(task_ids)} tasks"}
 
 # ===================== TASK COMMENTS =====================
 @api_router.get("/tasks/{task_id}/comments", response_model=List[CommentResponse])
@@ -1084,8 +1192,9 @@ def get_task_activity(task_id: str, db: Session = Depends(get_db), current_user:
 
 # ===================== NOTIFICATIONS =====================
 @api_router.get("/notifications", response_model=List[NotificationResponse])
-def get_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    notifications = db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).limit(50).all()
+def get_notifications(limit: int = 50, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    safe_limit = max(1, min(limit, 100))
+    notifications = db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).limit(safe_limit).all()
     return [NotificationResponse(
         id=n.id, type=n.type, title=n.title, message=n.message,
         task_id=n.task_id, is_read=n.is_read, created_at=n.created_at
@@ -1108,6 +1217,28 @@ def mark_notifications_read(notification_ids: List[str] = None, db: Session = De
 
 @api_router.post("/notifications/mark-all-read")
 def mark_all_notifications_read(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    db.query(Notification).filter(Notification.user_id == current_user.id).update({"is_read": True}, synchronize_session=False)
+    db.commit()
+    return {"message": "All notifications marked as read"}
+
+
+@api_router.put("/notifications/{notification_id}/read")
+def mark_notification_read(notification_id: str, db: Session = Depends(get_db),
+                           current_user: User = Depends(get_current_user)):
+    notification = db.query(Notification).filter(
+        Notification.id == notification_id,
+        Notification.user_id == current_user.id
+    ).first()
+
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+
+    notification.is_read = True
+    db.commit()
+    return {"message": "Notification marked as read"}
+
+@api_router.put("/notifications/read-all")
+def mark_all_notifications_read_put(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     db.query(Notification).filter(Notification.user_id == current_user.id).update({"is_read": True}, synchronize_session=False)
     db.commit()
     return {"message": "All notifications marked as read"}
@@ -1145,6 +1276,14 @@ async def serve_proof_file(filename: str):
     if not file_path.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(file_path)
+
+@api_router.get("/uploads/attachments/{filename}")
+async def serve_attachment_file(filename: str):
+    file_path = ROOT_DIR / "uploads" / "attachments" / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
+
 
 # ===================== WEBSOCKET =====================
 @api_router.websocket("/ws/{token}")
