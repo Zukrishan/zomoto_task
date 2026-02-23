@@ -389,8 +389,8 @@ export default function TaskDetailPage() {
 
         {/* Status & Priority Badges */}
         <div className="flex gap-2 flex-wrap">
-          <Badge className={`${STATUS_CONFIG[task.status]?.color} ${isOverdue || isNotCompleted ? 'animate-pulse' : ''}`} data-testid="task-status">
-            {STATUS_CONFIG[task.status]?.label}
+          <Badge className={`${(STATUS_CONFIG[task.status]?.color || 'bg-zinc-100 text-zinc-700')} ${isOverdue || isNotCompleted ? 'animate-pulse' : ''}`} data-testid="task-status">
+            {(STATUS_CONFIG[task.status]?.label || task.status || 'Unknown')}
           </Badge>
           <Badge className={PRIORITY_CONFIG[task.priority]?.color} data-testid="task-priority">
             {PRIORITY_CONFIG[task.priority]?.label} Priority

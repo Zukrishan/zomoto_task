@@ -11,32 +11,32 @@ A production-ready, mobile-first restaurant task management system built with Re
 | Manager | manager@zomoto.lk | 123456 |
 | Staff | staff@zomoto.lk | 123456 |
 
-## 📊 Database Connection (MongoDB)
+## 📊 Database Connection (MySQL)
 
 ### Connection Details
 ```
 Host: localhost
 Database: zomoto_tasks
-Port: 27017
+Port: 3306
 ```
 
 ### Connection String
 ```
-mongodb://localhost:27017/zomoto_tasks
+mysql+pymysql://root:<password>@localhost:3306/zomoto_tasks
 ```
 
 ### Connect via Command Line
 ```bash
-mongosh zomoto_tasks
+mysql -u root -p zomoto_tasks
 ```
 
-### View Collections
+### View Tables
 ```bash
-mongosh zomoto_tasks --eval "db.getCollectionNames()"
+mysql -u root -p -e "USE zomoto_tasks; SHOW TABLES;"
 ```
 
-### Database Collections
-| Collection | Description |
+### Database Tables
+| Table | Description |
 |------------|-------------|
 | users | User accounts (Owner, Manager, Staff) |
 | tasks | Task records with status tracking |
@@ -46,29 +46,30 @@ mongosh zomoto_tasks --eval "db.getCollectionNames()"
 | task_activity_logs | Audit trail for all task changes |
 | categories | Task categories with colors |
 | notifications | In-app notifications |
-| push_subscriptions | Web push subscriptions |
-| notification_logs | SMS/Push notification logs |
 
-### Sample Queries (MongoDB Shell)
-```javascript
-// View all users
-db.users.find({}, {password: 0})
+### Sample Queries (MySQL)
+```sql
+-- View all users (excluding password hash)
+SELECT id, name, email, phone, role, status, created_at
+FROM users;
 
-// View all tasks
-db.tasks.find({})
+-- View all tasks
+SELECT * FROM tasks;
 
-// View tasks by status
-db.tasks.find({status: "COMPLETED"})
+-- View tasks by status
+SELECT * FROM tasks WHERE status = "COMPLETED";
 
-// Count tasks per status
-db.tasks.aggregate([{$group: {_id: "$status", count: {$sum: 1}}}])
+-- Count tasks per status
+SELECT status, COUNT(*) AS count
+FROM tasks
+GROUP BY status;
 ```
 
 ## 🛠️ Tech Stack
 
 - **Frontend**: React 19, Tailwind CSS, Shadcn UI
 - **Backend**: FastAPI, SQLAlchemy
-- **Database**: MongoDB
+- **Database**: MySQL
 - **Auth**: JWT with role-based access control
 - **Font**: DM Sans
 
@@ -97,8 +98,7 @@ db.tasks.aggregate([{$group: {_id: "$status", count: {$sum: 1}}}])
 
 ### Backend (.env)
 ```env
-MONGO_URL=mongodb://localhost:27017
-DB_NAME=zomoto_tasks
+MYSQL_URL=mysql+pymysql://root:<password>@localhost:3306/zomoto_tasks
 JWT_SECRET=your-secret-key
 CORS_ORIGINS=*
 NOTIFY_LK_USER_ID=your-notify-user-id

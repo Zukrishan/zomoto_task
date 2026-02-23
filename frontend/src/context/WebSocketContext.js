@@ -13,11 +13,13 @@ export function WebSocketProvider({ children }) {
 
   // Get WebSocket URL from backend URL
   const getWsUrl = useCallback(() => {
-    const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+    const backendUrl = (process.env.REACT_APP_BACKEND_URL || window.location.origin).replace(/\/$/, '');
     // Convert http(s) to ws(s)
-    const wsUrl = backendUrl.replace(/^http/, 'ws');
+    let wsBaseUrl = backendUrl.replace(/^http/, 'ws');
+    // Avoid duplicating /api if backend URL already includes it
+    wsBaseUrl = wsBaseUrl.replace(/\/api$/, '');
     // Use /api/ws to route through the ingress proxy
-    return `${wsUrl}/api/ws/${token}`;
+    return `${wsBaseUrl}/api/ws/${encodeURIComponent(token)}`;
   }, [token]);
 
   const connect = useCallback(() => {
