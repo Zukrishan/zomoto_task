@@ -311,10 +311,12 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
           )}
           
           {/* Time interval display */}
-          <div className="flex items-center gap-1">
-            <Timer className="h-3.5 w-3.5" />
-            <span>{task.time_interval} {task.time_unit?.toLowerCase() || 'minutes'}</span>
-          </div>
+          {(task.time_interval > 0) && (
+            <div className="flex items-center gap-1">
+              <Timer className="h-3.5 w-3.5" />
+              <span>{task.time_interval} {task.time_unit?.toLowerCase() || 'minutes'}</span>
+            </div>
+          )}
           
           {/* Deadline / Time remaining */}
           {task.deadline && (
