@@ -49,10 +49,11 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
   
   // Use the is_overdue flag from backend - only tasks that were started (IN_PROGRESS) can be overdue
   // PENDING tasks just haven't been started yet, they're not "overdue"
+  const taskStatus = (task.status || '').toUpperCase();
   const isOverdue = task.is_overdue || (task.deadline && new Date(task.deadline) < new Date() && 
-    task.status === 'IN_PROGRESS');
+    taskStatus === 'IN_PROGRESS');
   
-  const isNotCompleted = task.status === 'NOT_COMPLETED';
+  const isNotCompleted = taskStatus === 'NOT_COMPLETED';
   const isRecurring = task.task_type === 'RECURRING';
   
   // Role checks
