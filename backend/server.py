@@ -825,6 +825,22 @@ async def create_task(task_data: TaskCreate, db: Session = Depends(get_db),
     
     return task_to_response(task)
 
+# ===================== BULK DELETE (must be before {task_id} routes) =====================
+@api_router.post("/tasks/bulk-delete")
+@api_router.delete("/tasks/bulk-delete")
+async def bulk_delete_tasks(request: BulkDeleteRequest, db: Session = Depends(get_db),
+                            current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    task_ids = request.task_ids
+    db.query(Task).filter(Task.id.in_(task_ids)).update({"is_deleted": True}, synchronize_session=False)
+    db.commit()
+    
+    await manager.broadcast_to_all({
+        "type": "tasks_deleted",
+        "data": {"ids": task_ids}
+    })
+    
+    return {"message": f"Deleted {len(task_ids)} tasks"}
+
 @api_router.get("/tasks/{task_id}")
 def get_task(task_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
