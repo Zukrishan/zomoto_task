@@ -13,6 +13,17 @@ const STATUS_CONFIG = {
   COMPLETED: { label: 'Completed', color: 'bg-emerald-100 text-emerald-700' },
   NOT_COMPLETED: { label: 'Not Completed', color: 'bg-red-100 text-red-700' },
   VERIFIED: { label: 'Verified', color: 'bg-purple-100 text-purple-700' },
+  // Lowercase variants for production compatibility
+  pending: { label: 'Pending', color: 'bg-blue-100 text-blue-700' },
+  in_progress: { label: 'In Progress', color: 'bg-amber-100 text-amber-700' },
+  completed: { label: 'Completed', color: 'bg-emerald-100 text-emerald-700' },
+  not_completed: { label: 'Not Completed', color: 'bg-red-100 text-red-700' },
+  verified: { label: 'Verified', color: 'bg-purple-100 text-purple-700' },
+};
+
+const getStatusConfig = (status) => {
+  if (!status) return { label: 'Unknown', color: 'bg-zinc-100 text-zinc-600' };
+  return STATUS_CONFIG[status] || STATUS_CONFIG[status.toUpperCase()] || { label: status, color: 'bg-zinc-100 text-zinc-600' };
 };
 
 const PRIORITY_CONFIG = {
