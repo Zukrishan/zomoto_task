@@ -297,8 +297,8 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
               </p>
             )}
           </div>
-          <Badge className={STATUS_CONFIG[task.status]?.color} data-testid="task-card-status">
-            {STATUS_CONFIG[task.status]?.label}
+          <Badge className={getStatusConfig(task.status).color} data-testid="task-card-status">
+            {getStatusConfig(task.status).label}
           </Badge>
         </div>
 
