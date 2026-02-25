@@ -130,6 +130,6 @@ INSERT IGNORE INTO categories (id, name, color) VALUES
 -- Generate fresh hashes on your server with: python3 -c "from passlib.context import CryptContext; print(CryptContext(schemes=['bcrypt']).hash('123456'))"
 -- Replace the hash below with your generated one
 INSERT IGNORE INTO users (id, name, email, role, hashed_password) VALUES
-(UUID(), 'Owner', 'owner@zomoto.lk', 'OWNER', '$2b$12$LJ3m4ys3Lk0TSwHCbVGJauNMoEMOEuKxQVXJwHKcQmHKsFMdKodLe'),
-(UUID(), 'Manager', 'manager@zomoto.lk', 'MANAGER', '$2b$12$LJ3m4ys3Lk0TSwHCbVGJauNMoEMOEuKxQVXJwHKcQmHKsFMdKodLe'),
-(UUID(), 'Staff', 'staff@zomoto.lk', 'STAFF', '$2b$12$LJ3m4ys3Lk0TSwHCbVGJauNMoEMOEuKxQVXJwHKcQmHKsFMdKodLe');
+(UUID(), 'Owner', 'owner@zomoto.lk', 'OWNER', '$2b$12$fUi9Y.Ol26dDiWrJ1jQEP.eaGz/O/Sv7oPXWff.Ea9uJaTuKF/W/i'),
+(UUID(), 'Manager', 'manager@zomoto.lk', 'MANAGER', '$2b$12$fUi9Y.Ol26dDiWrJ1jQEP.eaGz/O/Sv7oPXWff.Ea9uJaTuKF/W/i'),
+(UUID(), 'Staff', 'staff@zomoto.lk', 'STAFF', '$2b$12$fUi9Y.Ol26dDiWrJ1jQEP.eaGz/O/Sv7oPXWff.Ea9uJaTuKF/W/i');
