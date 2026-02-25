@@ -63,13 +63,13 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
   const isAssignedToMe = task.assigned_to === currentUser?.id;
   const canSelect = isOwner || isManager;
   
-  // Action visibility
-  const canStart = task.status === 'PENDING' && isAssignedToMe;
-  const canUploadProof = task.status === 'IN_PROGRESS' && isAssignedToMe;
-  const canComplete = task.status === 'IN_PROGRESS' && isAssignedToMe && task.proof_photos?.length > 0;
-  const canVerify = task.status === 'COMPLETED' && (isOwner || isManager);
+  // Action visibility (use normalized uppercase status)
+  const canStart = taskStatus === 'PENDING' && isAssignedToMe;
+  const canUploadProof = taskStatus === 'IN_PROGRESS' && isAssignedToMe;
+  const canComplete = taskStatus === 'IN_PROGRESS' && isAssignedToMe && task.proof_photos?.length > 0;
+  const canVerify = taskStatus === 'COMPLETED' && (isOwner || isManager);
   const hasProofPhotos = task.proof_photos && task.proof_photos.length > 0;
-  const canAssign = (isOwner || isManager) && !task.assigned_to && task.status === 'PENDING';
+  const canAssign = (isOwner || isManager) && !task.assigned_to && taskStatus === 'PENDING';
 
   // Close assign dropdown on outside click
   useEffect(() => {
