@@ -1026,20 +1026,6 @@ async def delete_task(task_id: str, db: Session = Depends(get_db),
     
     return {"message": "Task deleted"}
 
-@api_router.post("/tasks/bulk-delete")
-async def bulk_delete_tasks(request: BulkDeleteRequest, db: Session = Depends(get_db),
-                            current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
-    task_ids = request.task_ids
-    db.query(Task).filter(Task.id.in_(task_ids)).update({"is_deleted": True}, synchronize_session=False)
-    db.commit()
-    
-    await manager.broadcast_to_all({
-        "type": "tasks_deleted",
-        "data": {"ids": task_ids}
-    })
-    
-    return {"message": f"Deleted {len(task_ids)} tasks"}
-
 # ===================== TASK COMMENTS =====================
 @api_router.get("/tasks/{task_id}/comments", response_model=List[CommentResponse])
 def get_task_comments(task_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
