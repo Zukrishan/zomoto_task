@@ -160,7 +160,7 @@ export default function TasksPage() {
     const newTask = message.data;
     // Check if this task matches current filters
     const matchesFilters = 
-      (filters.status === 'ALL' || newTask.status === filters.status) &&
+      (filters.status === 'ALL' || (newTask.status || '').toUpperCase() === filters.status) &&
       (filters.category === 'ALL' || newTask.category === filters.category) &&
       (filters.priority === 'ALL' || newTask.priority === filters.priority);
     
@@ -186,7 +186,7 @@ export default function TasksPage() {
       
       // Check if updated task still matches filters
       const matchesFilters = 
-        (filters.status === 'ALL' || updatedTask.status === filters.status) &&
+        (filters.status === 'ALL' || (updatedTask.status || '').toUpperCase() === filters.status) &&
         (filters.category === 'ALL' || updatedTask.category === filters.category) &&
         (filters.priority === 'ALL' || updatedTask.priority === filters.priority);
       
