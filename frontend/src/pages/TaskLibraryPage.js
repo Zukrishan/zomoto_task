@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
 import { Plus, Search, BookOpen, Trash2, Loader2 } from 'lucide-react';
-import api from '../lib/api';
+import api, { getErrorMessage } from '../lib/api';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -32,9 +32,9 @@ export default function TaskLibraryPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [creating, setCreating] = useState(false);
   const [newTemplate, setNewTemplate] = useState({
-    name: '',
-    default_category: '',
-    default_priority: ''
+    title: '',
+    category: 'Other',
+    priority: 'MEDIUM'
   });
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export default function TaskLibraryPage() {
 
   const handleCreate = async (e) => {
     e.preventDefault();
-    if (!newTemplate.name.trim()) {
+    if (!newTemplate.title.trim()) {
       toast.error('Task name is required');
       return;
     }
@@ -63,10 +63,10 @@ export default function TaskLibraryPage() {
       await api.post('/task-templates', newTemplate);
       toast.success('Task template added');
       setShowCreate(false);
-      setNewTemplate({ name: '', default_category: '', default_priority: '' });
+      setNewTemplate({ title: '', category: 'Other', priority: 'MEDIUM' });
       fetchTemplates();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create template');
+      toast.error(getErrorMessage(error, 'Failed to create template'));
     } finally {
       setCreating(false);
     }
@@ -83,7 +83,7 @@ export default function TaskLibraryPage() {
   };
 
   const filteredTemplates = templates.filter(t => 
-    t.name.toLowerCase().includes(searchQuery.toLowerCase())
+    t.title?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   const PRIORITY_COLORS = {
@@ -139,14 +139,14 @@ export default function TaskLibraryPage() {
                 <CardContent className="p-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="font-medium text-zinc-900">{template.name}</p>
+                      <p className="font-medium text-zinc-900">{template.title}</p>
                       <div className="flex gap-2 mt-2">
-                        {template.default_category && (
-                          <Badge variant="outline">{template.default_category}</Badge>
+                        {template.category && (
+                          <Badge variant="outline">{template.category}</Badge>
                         )}
-                        {template.default_priority && (
-                          <Badge className={PRIORITY_COLORS[template.default_priority]}>
-                            {template.default_priority}
+                        {template.priority && (
+                          <Badge className={PRIORITY_COLORS[template.priority]}>
+                            {template.priority}
                           </Badge>
                         )}
                       </div>
@@ -189,11 +189,11 @@ export default function TaskLibraryPage() {
           </DialogHeader>
           <form onSubmit={handleCreate} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="name">Task Name</Label>
+              <Label htmlFor="title">Task Name</Label>
               <Input
-                id="name"
-                value={newTemplate.name}
-                onChange={(e) => setNewTemplate({...newTemplate, name: e.target.value})}
+                id="title"
+                value={newTemplate.title}
+                onChange={(e) => setNewTemplate({...newTemplate, title: e.target.value})}
                 placeholder="e.g., Clean Kitchen"
                 className="rounded-xl"
                 required
@@ -201,10 +201,10 @@ export default function TaskLibraryPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="category">Default Category (Optional)</Label>
+              <Label htmlFor="category">Default Category</Label>
               <Select 
-                value={newTemplate.default_category} 
-                onValueChange={(v) => setNewTemplate({...newTemplate, default_category: v})}
+                value={newTemplate.category} 
+                onValueChange={(v) => setNewTemplate({...newTemplate, category: v})}
               >
                 <SelectTrigger className="rounded-xl" data-testid="template-category">
                   <SelectValue placeholder="Select category" />
@@ -217,10 +217,10 @@ export default function TaskLibraryPage() {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="priority">Default Priority (Optional)</Label>
+              <Label htmlFor="priority">Default Priority</Label>
               <Select 
-                value={newTemplate.default_priority} 
-                onValueChange={(v) => setNewTemplate({...newTemplate, default_priority: v})}
+                value={newTemplate.priority} 
+                onValueChange={(v) => setNewTemplate({...newTemplate, priority: v})}
               >
                 <SelectTrigger className="rounded-xl" data-testid="template-priority">
                   <SelectValue placeholder="Select priority" />
