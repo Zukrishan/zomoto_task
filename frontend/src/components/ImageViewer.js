@@ -1,6 +1,6 @@
-import { X, Download, ZoomIn, ZoomOut, RotateCw } from 'lucide-react';
-import { useState } from 'react';
-import { Button } from './ui/button';
+import { X, Download, ZoomIn, ZoomOut, RotateCw } from "lucide-react";
+import { useState } from "react";
+import { Button } from "./ui/button";
 
 export default function ImageViewer({ open, onClose, imageUrl, filename }) {
   const [scale, setScale] = useState(1);
@@ -8,13 +8,35 @@ export default function ImageViewer({ open, onClose, imageUrl, filename }) {
 
   if (!open) return null;
 
-  const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 3));
-  const handleZoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.5));
-  const handleRotate = () => setRotation(prev => (prev + 90) % 360);
-  const handleDownload = () => window.open(imageUrl, '_blank');
+  console.log("ImageViewer imageUrl:", imageUrl);
+
+  const handleZoomIn = () => setScale((prev) => Math.min(prev + 0.25, 3));
+  const handleZoomOut = () => setScale((prev) => Math.max(prev - 0.25, 0.5));
+  const handleRotate = () => setRotation((prev) => (prev + 90) % 360);
+  const handleDownload = async () => {
+    try {
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      // Use the filename prop, fallback to extracting from URL
+      a.download = filename || imageUrl.split("/").pop() || "proof-photo.jpg";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Download failed:", error);
+      window.open(imageUrl, "_blank");
+    }
+  };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90" data-testid="image-viewer">
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-black/90"
+      data-testid="image-viewer"
+    >
       {/* Close button */}
       <button
         onClick={onClose}
@@ -35,7 +57,9 @@ export default function ImageViewer({ open, onClose, imageUrl, filename }) {
         >
           <ZoomOut className="h-5 w-5" />
         </Button>
-        <span className="text-white text-sm min-w-[60px] text-center">{Math.round(scale * 100)}%</span>
+        <span className="text-white text-sm min-w-[60px] text-center">
+          {Math.round(scale * 100)}%
+        </span>
         <Button
           variant="ghost"
           size="icon"
@@ -72,7 +96,8 @@ export default function ImageViewer({ open, onClose, imageUrl, filename }) {
       </div>
 
       {/* Image */}
-      <div 
+      {/* Image */}
+      <div
         className="w-full h-full flex items-center justify-center p-8 overflow-hidden"
         onClick={onClose}
       >
@@ -84,6 +109,11 @@ export default function ImageViewer({ open, onClose, imageUrl, filename }) {
             transform: `scale(${scale}) rotate(${rotation}deg)`,
           }}
           onClick={(e) => e.stopPropagation()}
+          onError={(e) => {
+            console.error("ImageViewer failed to load:", imageUrl);
+            e.currentTarget.src =
+              "https://placehold.co/400x400?text=Failed+to+Load";
+          }}
           data-testid="viewer-image"
         />
       </div>
