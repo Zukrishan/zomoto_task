@@ -29,10 +29,10 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # Ensure MySQL is installed and running before connecting
-subprocess.run([str(ROOT_DIR / 'ensure_mysql.sh')], timeout=120)
+#subprocess.run([str(ROOT_DIR / 'ensure_mysql.sh')], timeout=120)
 
 # MySQL Configuration
-MYSQL_URL = os.environ.get('MYSQL_URL', 'mysql+pymysql://root@localhost/zomoto_tasks?unix_socket=/run/mysqld/mysqld.sock')
+MYSQL_URL = os.environ.get('MYSQL_URL', 'mysql+pymysql://root:Qwerty123@localhost/zomoto_tasks?unix_socket=/run/mysqld/mysqld.sock')
 engine = create_engine(MYSQL_URL, pool_size=10, max_overflow=20, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()

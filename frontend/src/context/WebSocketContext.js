@@ -1,5 +1,12 @@
-import { createContext, useContext, useEffect, useRef, useState, useCallback } from 'react';
-import { useAuth } from './AuthContext';
+import {
+  createContext,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+} from "react";
+import { useAuth } from "./AuthContext";
 
 const WebSocketContext = createContext(null);
 
@@ -13,16 +20,16 @@ export function WebSocketProvider({ children }) {
 
   // Get WebSocket URL from backend URL
   const getWsUrl = useCallback(() => {
-    const backendUrl = process.env.REACT_APP_BACKEND_URL || '';
+    const backendUrl = process.env.REACT_APP_BACKEND_URL || "";
     // Convert http(s) to ws(s)
-    const wsUrl = backendUrl.replace(/^http/, 'ws');
+    const wsUrl = backendUrl.replace(/^http/, "ws");
     // Use /api/ws to route through the ingress proxy
     return `${wsUrl}/api/ws/${token}`;
   }, [token]);
 
   const connect = useCallback(() => {
     if (!token || !isAuthenticated) return;
-    
+
     // Don't create new connection if already connected
     if (ws.current?.readyState === WebSocket.OPEN) return;
 
@@ -31,7 +38,7 @@ export function WebSocketProvider({ children }) {
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
-        console.log('WebSocket connected');
+        console.log("WebSocket connected");
         setIsConnected(true);
         // Clear reconnect timer
         if (reconnectTimer.current) {
@@ -43,46 +50,50 @@ export function WebSocketProvider({ children }) {
       ws.current.onmessage = (event) => {
         try {
           // Handle pong response
-          if (event.data === 'pong') {
+          if (event.data === "pong") {
             return;
           }
-          
+
           const message = JSON.parse(event.data);
-          console.log('WebSocket received:', message.type, message.data?.title || message.data?.id || '');
+          console.log(
+            "WebSocket received:",
+            message.type,
+            message.data?.title || message.data?.id || "",
+          );
           setLastMessage(message);
-          
+
           // Notify all listeners for this message type
           const typeListeners = listeners.current.get(message.type) || [];
           console.log(`Listeners for ${message.type}:`, typeListeners.length);
-          typeListeners.forEach(callback => callback(message));
-          
+          typeListeners.forEach((callback) => callback(message));
+
           // Also notify "all" listeners
-          const allListeners = listeners.current.get('*') || [];
-          allListeners.forEach(callback => callback(message));
+          const allListeners = listeners.current.get("*") || [];
+          allListeners.forEach((callback) => callback(message));
         } catch (e) {
-          console.error('Failed to parse WebSocket message:', e, event.data);
+          console.error("Failed to parse WebSocket message:", e, event.data);
         }
       };
 
       ws.current.onclose = (event) => {
-        console.log('WebSocket disconnected:', event.code);
+        console.log("WebSocket disconnected:", event.code);
         setIsConnected(false);
         ws.current = null;
-        
+
         // Reconnect after delay (only if still authenticated)
         if (isAuthenticated && event.code !== 4001) {
           reconnectTimer.current = setTimeout(() => {
-            console.log('Attempting to reconnect...');
+            console.log("Attempting to reconnect...");
             connect();
           }, 3000);
         }
       };
 
       ws.current.onerror = (error) => {
-        console.error('WebSocket error:', error);
+        console.error("WebSocket error:", error);
       };
     } catch (error) {
-      console.error('Failed to create WebSocket:', error);
+      console.error("Failed to create WebSocket:", error);
     }
   }, [token, isAuthenticated, getWsUrl]);
 
@@ -117,7 +128,7 @@ export function WebSocketProvider({ children }) {
 
     const pingInterval = setInterval(() => {
       if (ws.current?.readyState === WebSocket.OPEN) {
-        ws.current.send('ping');
+        ws.current.send("ping");
       }
     }, 30000);
 
@@ -144,7 +155,9 @@ export function WebSocketProvider({ children }) {
   // Send message through WebSocket
   const send = useCallback((message) => {
     if (ws.current?.readyState === WebSocket.OPEN) {
-      ws.current.send(typeof message === 'string' ? message : JSON.stringify(message));
+      ws.current.send(
+        typeof message === "string" ? message : JSON.stringify(message),
+      );
     }
   }, []);
 
@@ -166,7 +179,7 @@ export function WebSocketProvider({ children }) {
 export function useWebSocket() {
   const context = useContext(WebSocketContext);
   if (!context) {
-    throw new Error('useWebSocket must be used within a WebSocketProvider');
+    throw new Error("useWebSocket must be used within a WebSocketProvider");
   }
   return context;
 }
@@ -174,7 +187,7 @@ export function useWebSocket() {
 // Hook for subscribing to specific event types
 export function useWebSocketEvent(eventType, callback) {
   const { subscribe } = useWebSocket();
-  
+
   useEffect(() => {
     const unsubscribe = subscribe(eventType, callback);
     return unsubscribe;

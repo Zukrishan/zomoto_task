@@ -1,30 +1,63 @@
-import { useState, useRef, useCallback, useEffect } from 'react';
-import { formatDistanceToNow } from 'date-fns';
-import { Clock, User, AlertCircle, Timer, Repeat, Play, CheckCircle2, Camera, ShieldCheck, Loader2, Eye, X, Download, Maximize2, UserPlus } from 'lucide-react';
-import { toast } from 'sonner';
-import { Card, CardContent } from './ui/card';
-import { Badge } from './ui/badge';
-import { Button } from './ui/button';
-import api, { getErrorMessage } from '../lib/api';
+import { useState, useRef, useCallback, useEffect } from "react";
+import { formatDistanceToNow } from "date-fns";
+import {
+  Clock,
+  User,
+  AlertCircle,
+  Timer,
+  Repeat,
+  Play,
+  CheckCircle2,
+  Camera,
+  ShieldCheck,
+  Loader2,
+  Eye,
+  X,
+  Download,
+  Maximize2,
+  UserPlus,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Card, CardContent } from "./ui/card";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import api, { getErrorMessage } from "../lib/api";
+
+const BACKEND_URL = (process.env.REACT_APP_BACKEND_URL || "").replace(
+  /\/$/,
+  "",
+);
+const getFullUrl = (url) => {
+  if (!url) return "";
+  if (url.startsWith("http")) return url;
+  return `${BACKEND_URL}${url.startsWith("/") ? url : "/" + url}`;
+};
 
 const STATUS_CONFIG = {
-  PENDING: { label: 'Pending', color: 'bg-blue-100 text-blue-700' },
-  IN_PROGRESS: { label: 'In Progress', color: 'bg-amber-100 text-amber-700' },
-  COMPLETED: { label: 'Completed', color: 'bg-emerald-100 text-emerald-700' },
-  NOT_COMPLETED: { label: 'Not Completed', color: 'bg-red-100 text-red-700' },
-  VERIFIED: { label: 'Verified', color: 'bg-purple-100 text-purple-700' },
+  PENDING: { label: "Pending", color: "bg-blue-100 text-blue-700" },
+  IN_PROGRESS: { label: "In Progress", color: "bg-amber-100 text-amber-700" },
+  COMPLETED: { label: "Completed", color: "bg-emerald-100 text-emerald-700" },
+  NOT_COMPLETED: { label: "Not Completed", color: "bg-red-100 text-red-700" },
+  VERIFIED: { label: "Verified", color: "bg-purple-100 text-purple-700" },
 };
 
 const PRIORITY_CONFIG = {
-  HIGH: { color: 'border-l-red-500' },
-  MEDIUM: { color: 'border-l-amber-500' },
-  LOW: { color: 'border-l-green-500' },
+  HIGH: { color: "border-l-red-500" },
+  MEDIUM: { color: "border-l-amber-500" },
+  LOW: { color: "border-l-green-500" },
 };
 
 // Long press duration in milliseconds
 const LONG_PRESS_DURATION = 500;
 
-export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onLongPress, selectMode }) {
+export default function TaskCard({
+  task,
+  onClick,
+  onTaskUpdate,
+  currentUser,
+  onLongPress,
+  selectMode,
+}) {
   const [loading, setLoading] = useState(false);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [showProofModal, setShowProofModal] = useState(false);
@@ -35,29 +68,36 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
   const assignRef = useRef(null);
   const longPressTimer = useRef(null);
   const isLongPress = useRef(false);
-  
+
   // Use the is_overdue flag from backend - only tasks that were started (IN_PROGRESS) can be overdue
   // PENDING tasks just haven't been started yet, they're not "overdue"
-  const isOverdue = task.is_overdue || (task.deadline && new Date(task.deadline) < new Date() && 
-    task.status === 'IN_PROGRESS');
-  
-  const isNotCompleted = task.status === 'NOT_COMPLETED';
-  const isRecurring = task.task_type === 'RECURRING';
-  
+  const isOverdue =
+    task.is_overdue ||
+    (task.deadline &&
+      new Date(task.deadline) < new Date() &&
+      task.status === "IN_PROGRESS");
+
+  const isNotCompleted = task.status === "NOT_COMPLETED";
+  const isRecurring = task.task_type === "RECURRING";
+
   // Role checks
-  const isStaff = currentUser?.role === 'STAFF';
-  const isOwner = currentUser?.role === 'OWNER';
-  const isManager = currentUser?.role === 'MANAGER';
+  const isStaff = currentUser?.role === "STAFF";
+  const isOwner = currentUser?.role === "OWNER";
+  const isManager = currentUser?.role === "MANAGER";
   const isAssignedToMe = task.assigned_to === currentUser?.id;
   const canSelect = isOwner || isManager;
-  
+
   // Action visibility
-  const canStart = task.status === 'PENDING' && isAssignedToMe;
-  const canUploadProof = task.status === 'IN_PROGRESS' && isAssignedToMe;
-  const canComplete = task.status === 'IN_PROGRESS' && isAssignedToMe && task.proof_photos?.length > 0;
-  const canVerify = task.status === 'COMPLETED' && (isOwner || isManager);
+  const canStart = task.status === "PENDING" && isAssignedToMe;
+  const canUploadProof = task.status === "IN_PROGRESS" && isAssignedToMe;
+  const canComplete =
+    task.status === "IN_PROGRESS" &&
+    isAssignedToMe &&
+    task.proof_photos?.length > 0;
+  const canVerify = task.status === "COMPLETED" && (isOwner || isManager);
   const hasProofPhotos = task.proof_photos && task.proof_photos.length > 0;
-  const canAssign = (isOwner || isManager) && !task.assigned_to && task.status === 'PENDING';
+  const canAssign =
+    (isOwner || isManager) && !task.assigned_to && task.status === "PENDING";
 
   // Close assign dropdown on outside click
   useEffect(() => {
@@ -67,19 +107,19 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
       }
     };
     if (showAssignDropdown) {
-      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener("mousedown", handleClickOutside);
     }
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [showAssignDropdown]);
 
   const handleOpenAssign = async (e) => {
     e.stopPropagation();
     if (staffList.length === 0) {
       try {
-        const response = await api.get('/users/staff');
+        const response = await api.get("/users/staff");
         setStaffList(response.data);
       } catch (error) {
-        toast.error('Failed to load staff list');
+        toast.error("Failed to load staff list");
         return;
       }
     }
@@ -95,25 +135,28 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
       setShowAssignDropdown(false);
       onTaskUpdate?.();
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to assign staff'));
+      toast.error(getErrorMessage(error, "Failed to assign staff"));
     } finally {
       setAssignLoading(false);
     }
   };
 
   // Long press handlers for touch devices
-  const handleTouchStart = useCallback((e) => {
-    if (!canSelect || selectMode) return;
-    isLongPress.current = false;
-    longPressTimer.current = setTimeout(() => {
-      isLongPress.current = true;
-      // Vibrate on mobile if supported
-      if (navigator.vibrate) {
-        navigator.vibrate(50);
-      }
-      onLongPress?.(task.id);
-    }, LONG_PRESS_DURATION);
-  }, [canSelect, selectMode, onLongPress, task.id]);
+  const handleTouchStart = useCallback(
+    (e) => {
+      if (!canSelect || selectMode) return;
+      isLongPress.current = false;
+      longPressTimer.current = setTimeout(() => {
+        isLongPress.current = true;
+        // Vibrate on mobile if supported
+        if (navigator.vibrate) {
+          navigator.vibrate(50);
+        }
+        onLongPress?.(task.id);
+      }, LONG_PRESS_DURATION);
+    },
+    [canSelect, selectMode, onLongPress, task.id],
+  );
 
   const handleTouchEnd = useCallback((e) => {
     if (longPressTimer.current) {
@@ -156,10 +199,10 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
     setLoading(true);
     try {
       await api.post(`/tasks/${task.id}/start`);
-      toast.success('Task started!');
+      toast.success("Task started!");
       onTaskUpdate?.();
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to start task'));
+      toast.error(getErrorMessage(error, "Failed to start task"));
     } finally {
       setLoading(false);
     }
@@ -168,16 +211,16 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
   const handleCompleteTask = async (e) => {
     e.stopPropagation();
     if (!hasProofPhotos) {
-      toast.error('Please upload proof photo first');
+      toast.error("Please upload proof photo first");
       return;
     }
     setLoading(true);
     try {
       await api.post(`/tasks/${task.id}/complete`);
-      toast.success('Task completed!');
+      toast.success("Task completed!");
       onTaskUpdate?.();
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to complete task'));
+      toast.error(getErrorMessage(error, "Failed to complete task"));
     } finally {
       setLoading(false);
     }
@@ -188,10 +231,10 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
     setLoading(true);
     try {
       await api.post(`/tasks/${task.id}/verify`);
-      toast.success('Task verified!');
+      toast.success("Task verified!");
       onTaskUpdate?.();
     } catch (error) {
-      toast.error(getErrorMessage(error, 'Failed to verify task'));
+      toast.error(getErrorMessage(error, "Failed to verify task"));
     } finally {
       setLoading(false);
     }
@@ -204,16 +247,16 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
 
     setUploadingProof(true);
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("file", file);
 
     try {
       await api.post(`/tasks/${task.id}/proof`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
+        headers: { "Content-Type": "multipart/form-data" },
       });
-      toast.success('Proof photo uploaded!');
+      toast.success("Proof photo uploaded!");
       onTaskUpdate?.();
     } catch (error) {
-      toast.error('Failed to upload proof photo');
+      toast.error("Failed to upload proof photo");
     } finally {
       setUploadingProof(false);
     }
@@ -241,28 +284,28 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
 
   const handleDownloadPhoto = async (photoUrl, index) => {
     try {
-      const response = await fetch(photoUrl);
+      const fullUrl = getFullUrl(photoUrl); // ADD THIS
+      const response = await fetch(fullUrl); // USE fullUrl
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
+      const link = document.createElement("a");
       link.href = url;
-      link.download = `proof_${task.title.replace(/\s+/g, '_')}_${index + 1}.jpg`;
+      link.download = `proof_${task.title.replace(/\s+/g, "_")}_${index + 1}.jpg`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(url);
-      toast.success('Photo downloaded!');
+      toast.success("Photo downloaded!");
     } catch (error) {
-      // Fallback: open in new tab
-      window.open(photoUrl, '_blank');
+      window.open(getFullUrl(photoUrl), "_blank"); // USE getFullUrl here too
     }
   };
 
   return (
-    <Card 
+    <Card
       className={`rounded-2xl border shadow-sm hover:shadow-md transition-all cursor-pointer border-l-4 select-none
-        ${isNotCompleted || isOverdue ? 'bg-red-50 border-red-200' : 'bg-white border-zinc-100'} 
-        ${PRIORITY_CONFIG[task.priority]?.color || 'border-l-zinc-300'}`}
+        ${isNotCompleted || isOverdue ? "bg-red-50 border-red-200" : "bg-white border-zinc-100"} 
+        ${PRIORITY_CONFIG[task.priority]?.color || "border-l-zinc-300"}`}
       onClick={handleClick}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -273,20 +316,31 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <h3 className={`font-semibold line-clamp-1 ${isNotCompleted || isOverdue ? 'text-red-700' : 'text-zinc-900'}`} data-testid="task-card-title">
+              <h3
+                className={`font-semibold line-clamp-1 ${isNotCompleted || isOverdue ? "text-red-700" : "text-zinc-900"}`}
+                data-testid="task-card-title"
+              >
                 {task.title}
               </h3>
               {isRecurring && (
-                <Repeat className="h-4 w-4 text-blue-500 flex-shrink-0" title="Recurring Task" />
+                <Repeat
+                  className="h-4 w-4 text-blue-500 flex-shrink-0"
+                  title="Recurring Task"
+                />
               )}
             </div>
             {task.description && (
-              <p className={`text-sm line-clamp-1 mt-1 ${isNotCompleted || isOverdue ? 'text-red-600' : 'text-zinc-500'}`}>
+              <p
+                className={`text-sm line-clamp-1 mt-1 ${isNotCompleted || isOverdue ? "text-red-600" : "text-zinc-500"}`}
+              >
                 {task.description}
               </p>
             )}
           </div>
-          <Badge className={STATUS_CONFIG[task.status]?.color} data-testid="task-card-status">
+          <Badge
+            className={STATUS_CONFIG[task.status]?.color}
+            data-testid="task-card-status"
+          >
             {STATUS_CONFIG[task.status]?.label}
           </Badge>
         </div>
@@ -295,32 +349,50 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
           {task.assigned_to_name && (
             <div className="flex items-center gap-1">
               <User className="h-3.5 w-3.5" />
-              <span className="truncate max-w-[100px]">{task.assigned_to_name}</span>
+              <span className="truncate max-w-[100px]">
+                {task.assigned_to_name}
+              </span>
             </div>
           )}
-          
+
           {/* Time interval display */}
           <div className="flex items-center gap-1">
             <Timer className="h-3.5 w-3.5" />
-            <span>{task.time_interval} {task.time_unit?.toLowerCase() || 'minutes'}</span>
+            <span>
+              {task.time_interval} {task.time_unit?.toLowerCase() || "minutes"}
+            </span>
           </div>
-          
+
           {/* Deadline / Time remaining */}
           {task.deadline && (
-            <div className={`flex items-center gap-1 ${isOverdue || isNotCompleted ? 'text-red-600 font-medium' : ''}`}>
-              {isOverdue || isNotCompleted ? <AlertCircle className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
+            <div
+              className={`flex items-center gap-1 ${isOverdue || isNotCompleted ? "text-red-600 font-medium" : ""}`}
+            >
+              {isOverdue || isNotCompleted ? (
+                <AlertCircle className="h-3.5 w-3.5" />
+              ) : (
+                <Clock className="h-3.5 w-3.5" />
+              )}
               <span>{getTimeDisplay()}</span>
             </div>
           )}
-          
+
           <Badge variant="outline" className="text-xs">
             {task.category}
           </Badge>
         </div>
 
         {/* Action Buttons Row */}
-        {(canStart || canUploadProof || canComplete || canVerify || hasProofPhotos || canAssign) && (
-          <div className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-100 flex-wrap" onClick={(e) => e.stopPropagation()}>
+        {(canStart ||
+          canUploadProof ||
+          canComplete ||
+          canVerify ||
+          hasProofPhotos ||
+          canAssign) && (
+          <div
+            className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-100 flex-wrap"
+            onClick={(e) => e.stopPropagation()}
+          >
             {/* Assign to Staff Button */}
             {canAssign && (
               <div className="relative" ref={assignRef}>
@@ -332,24 +404,42 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
                   className="rounded-full h-8 px-4 border-blue-500 text-blue-600 hover:bg-blue-50"
                   data-testid={`assign-task-${task.id}`}
                 >
-                  {assignLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" /> : <UserPlus className="h-3.5 w-3.5 mr-1" />}
+                  {assignLoading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                  ) : (
+                    <UserPlus className="h-3.5 w-3.5 mr-1" />
+                  )}
                   Assign
                 </Button>
                 {showAssignDropdown && (
-                  <div className="absolute left-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-zinc-200 z-[60] py-1 max-h-48 overflow-y-auto" data-testid="assign-dropdown">
-                    {staffList.length > 0 ? staffList.map(staff => (
-                      <button
-                        key={staff.id}
-                        onClick={(e) => handleAssignStaff(e, staff.id, staff.name)}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2"
-                        data-testid={`assign-option-${staff.id}`}
-                      >
-                        <User className="h-3.5 w-3.5 text-zinc-400" />
-                        <span>{staff.name}</span>
-                        <Badge variant="outline" className="ml-auto text-[10px]">{staff.role}</Badge>
-                      </button>
-                    )) : (
-                      <div className="px-3 py-2 text-sm text-zinc-400">No staff available</div>
+                  <div
+                    className="absolute left-0 top-full mt-1 w-48 bg-white rounded-xl shadow-lg border border-zinc-200 z-[60] py-1 max-h-48 overflow-y-auto"
+                    data-testid="assign-dropdown"
+                  >
+                    {staffList.length > 0 ? (
+                      staffList.map((staff) => (
+                        <button
+                          key={staff.id}
+                          onClick={(e) =>
+                            handleAssignStaff(e, staff.id, staff.name)
+                          }
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 flex items-center gap-2"
+                          data-testid={`assign-option-${staff.id}`}
+                        >
+                          <User className="h-3.5 w-3.5 text-zinc-400" />
+                          <span>{staff.name}</span>
+                          <Badge
+                            variant="outline"
+                            className="ml-auto text-[10px]"
+                          >
+                            {staff.role}
+                          </Badge>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-2 text-sm text-zinc-400">
+                        No staff available
+                      </div>
                     )}
                   </div>
                 )}
@@ -365,20 +455,27 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
                 className="bg-amber-500 hover:bg-amber-600 text-white rounded-full h-8 px-4"
                 data-testid={`start-task-${task.id}`}
               >
-                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5 mr-1" />}
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Play className="h-3.5 w-3.5 mr-1" />
+                )}
                 Start
               </Button>
             )}
 
             {/* Upload Proof Button (when IN_PROGRESS) */}
             {canUploadProof && (
-              <label className="cursor-pointer" onClick={(e) => e.stopPropagation()}>
+              <label
+                className="cursor-pointer"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <Button
                   size="sm"
                   variant="outline"
                   asChild
                   disabled={uploadingProof}
-                  className={`rounded-full h-8 px-4 ${hasProofPhotos ? 'border-emerald-500 text-emerald-600' : 'border-amber-500 text-amber-600'}`}
+                  className={`rounded-full h-8 px-4 ${hasProofPhotos ? "border-emerald-500 text-emerald-600" : "border-amber-500 text-amber-600"}`}
                   data-testid={`upload-proof-${task.id}`}
                 >
                   <span>
@@ -387,12 +484,14 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
                     ) : (
                       <Camera className="h-3.5 w-3.5 mr-1" />
                     )}
-                    {hasProofPhotos ? `${task.proof_photos.length} Photo${task.proof_photos.length > 1 ? 's' : ''}` : 'Add Proof'}
+                    {hasProofPhotos
+                      ? `${task.proof_photos.length} Photo${task.proof_photos.length > 1 ? "s" : ""}`
+                      : "Add Proof"}
                   </span>
                 </Button>
-                <input 
-                  type="file" 
-                  className="hidden" 
+                <input
+                  type="file"
+                  className="hidden"
                   onChange={handleProofUpload}
                   accept="image/*"
                   onClick={(e) => e.stopPropagation()}
@@ -423,17 +522,23 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
                 className="bg-emerald-500 hover:bg-emerald-600 text-white rounded-full h-8 px-4"
                 data-testid={`complete-task-${task.id}`}
               >
-                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5 mr-1" />}
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                )}
                 Complete
               </Button>
             )}
 
             {/* Cannot complete without proof hint */}
-            {task.status === 'IN_PROGRESS' && isAssignedToMe && !hasProofPhotos && (
-              <span className="text-xs text-amber-600 ml-2">
-                Upload proof to complete
-              </span>
-            )}
+            {task.status === "IN_PROGRESS" &&
+              isAssignedToMe &&
+              !hasProofPhotos && (
+                <span className="text-xs text-amber-600 ml-2">
+                  Upload proof to complete
+                </span>
+              )}
 
             {/* Verify Task Button (Manager/Owner only) */}
             {canVerify && (
@@ -444,7 +549,11 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
                 className="bg-purple-500 hover:bg-purple-600 text-white rounded-full h-8 px-4"
                 data-testid={`verify-task-${task.id}`}
               >
-                {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <ShieldCheck className="h-3.5 w-3.5 mr-1" />}
+                {loading ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <ShieldCheck className="h-3.5 w-3.5 mr-1" />
+                )}
                 Verify
               </Button>
             )}
@@ -454,12 +563,12 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
 
       {/* Proof Photos Modal */}
       {showProofModal && hasProofPhotos && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4"
           onClick={closeProofModal}
           data-testid="proof-modal"
         >
-          <div 
+          <div
             className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
@@ -478,15 +587,15 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
                 <X className="h-5 w-5" />
               </Button>
             </div>
-            
+
             {/* Modal Body - Photos Grid */}
             <div className="p-4 overflow-y-auto max-h-[70vh]">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {task.proof_photos.map((photo, index) => (
                   <div key={index} className="relative group">
                     <div className="aspect-video bg-zinc-100 rounded-xl overflow-hidden">
-                      <img 
-                        src={photo} 
+                      <img
+                        src={getFullUrl(photo)}
                         alt={`Proof ${index + 1}`}
                         className="w-full h-full object-cover"
                         data-testid={`proof-photo-${index}`}
@@ -523,14 +632,14 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
 
       {/* Enlarged Photo Lightbox */}
       {enlargedPhoto && (
-        <div 
+        <div
           className="fixed inset-0 bg-black/90 z-[250] flex items-center justify-center p-4"
           onClick={closeEnlargedPhoto}
           data-testid="enlarged-photo-modal"
         >
           <div className="relative max-w-[95vw] max-h-[95vh]">
-            <img 
-              src={enlargedPhoto} 
+            <img
+              src={getFullUrl(enlargedPhoto)}
               alt="Enlarged proof"
               className="max-w-full max-h-[90vh] object-contain rounded-lg"
               onClick={(e) => e.stopPropagation()}
