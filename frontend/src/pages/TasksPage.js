@@ -177,25 +177,28 @@ export default function TasksPage() {
 
   const handleTaskUpdated = useCallback((message) => {
     const updatedTask = message.data;
+    
+    // If task is archived (VERIFIED), remove from active list immediately
+    if (updatedTask.is_archived || (updatedTask.status || '').toUpperCase() === 'VERIFIED') {
+      setTasks(prev => prev.filter(t => t.id !== updatedTask.id));
+      return;
+    }
+    
     setTasks(prev => {
       const index = prev.findIndex(t => t.id === updatedTask.id);
       if (index === -1) {
-        // Task not in list, might need to add it if it matches filters now
         return prev;
       }
       
-      // Check if updated task still matches filters
       const matchesFilters = 
         (filters.status === 'ALL' || (updatedTask.status || '').toUpperCase() === filters.status) &&
         (filters.category === 'ALL' || updatedTask.category === filters.category) &&
         (filters.priority === 'ALL' || updatedTask.priority === filters.priority);
       
       if (!matchesFilters) {
-        // Remove from list if doesn't match anymore
         return prev.filter(t => t.id !== updatedTask.id);
       }
       
-      // Update the task in place
       const newTasks = [...prev];
       newTasks[index] = updatedTask;
       return newTasks;
