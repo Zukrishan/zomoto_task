@@ -678,17 +678,38 @@ def delete_category(category_id: str, db: Session = Depends(get_db),
     return {"message": "Category deleted"}
 
 # ===================== TASK TEMPLATE ENDPOINTS =====================
-@api_router.get("/task-templates", response_model=List[TemplateResponse])
+def template_to_response(t: TaskTemplate) -> dict:
+    return {
+        "id": t.id,
+        "title": t.title,
+        "description": t.description,
+        "category": t.category or "Other",
+        "priority": t.priority or "MEDIUM",
+        "time_interval": t.time_interval or 30,
+        "time_unit": t.time_unit or "MINUTES",
+        "is_recurring": t.is_recurring or False,
+        "is_active": t.is_active if t.is_active is not None else True,
+        "day_intervals": t.day_intervals,
+        "allocated_time": t.allocated_time,
+        "assigned_to": t.assigned_to,
+        "assigned_to_name": t.assigned_to_name,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
+
+@api_router.get("/task-templates")
 def get_templates(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     templates = db.query(TaskTemplate).all()
-    return [TemplateResponse(
-        id=t.id, title=t.title, description=t.description, category=t.category,
-        priority=t.priority, time_interval=t.time_interval, time_unit=t.time_unit, created_at=t.created_at
-    ) for t in templates]
+    return [template_to_response(t) for t in templates]
 
-@api_router.post("/task-templates", response_model=TemplateResponse)
+@api_router.post("/task-templates")
 def create_template(template_data: TemplateCreate, db: Session = Depends(get_db),
                     current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    assigned_to_name = None
+    if template_data.assigned_to:
+        staff = db.query(User).filter(User.id == template_data.assigned_to).first()
+        if staff:
+            assigned_to_name = staff.name
+
     template = TaskTemplate(
         title=template_data.title,
         description=template_data.description,
@@ -696,16 +717,39 @@ def create_template(template_data: TemplateCreate, db: Session = Depends(get_db)
         priority=template_data.priority,
         time_interval=template_data.time_interval,
         time_unit=template_data.time_unit,
+        is_recurring=template_data.is_recurring,
+        day_intervals=template_data.day_intervals,
+        allocated_time=template_data.allocated_time,
+        assigned_to=template_data.assigned_to,
+        assigned_to_name=assigned_to_name,
         created_by=current_user.id
     )
     db.add(template)
     db.commit()
     db.refresh(template)
+    return template_to_response(template)
+
+@api_router.put("/task-templates/{template_id}")
+def update_template(template_id: str, template_data: TemplateUpdate, db: Session = Depends(get_db),
+                    current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    template = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
     
-    return TemplateResponse(
-        id=template.id, title=template.title, description=template.description, category=template.category,
-        priority=template.priority, time_interval=template.time_interval, time_unit=template.time_unit, created_at=template.created_at
-    )
+    update_fields = template_data.dict(exclude_unset=True)
+    
+    if "assigned_to" in update_fields and update_fields["assigned_to"]:
+        staff = db.query(User).filter(User.id == update_fields["assigned_to"]).first()
+        if staff:
+            template.assigned_to_name = staff.name
+    
+    for key, value in update_fields.items():
+        if value is not None:
+            setattr(template, key, value)
+    
+    db.commit()
+    db.refresh(template)
+    return template_to_response(template)
 
 @api_router.delete("/task-templates/{template_id}")
 def delete_template(template_id: str, db: Session = Depends(get_db),
