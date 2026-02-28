@@ -301,6 +301,9 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
           <Badge className={getStatusConfig(task.status).color} data-testid="task-card-status">
             {getStatusConfig(task.status).label}
           </Badge>
+          {task.is_late && (
+            <Badge className="bg-orange-100 text-orange-700" data-testid="task-late-badge">Late</Badge>
+          )}
         </div>
 
         <div className="flex items-center gap-4 mt-3 text-sm text-zinc-500 flex-wrap">
@@ -311,16 +314,32 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
             </div>
           )}
           
-          {/* Time interval display */}
+          {/* Time Allowed display */}
           {(task.time_interval > 0) && (
             <div className="flex items-center gap-1">
               <Timer className="h-3.5 w-3.5" />
-              <span>{task.time_interval} {task.time_unit?.toLowerCase() || 'minutes'}</span>
+              <span>Allowed: {task.time_interval} {task.time_unit?.toLowerCase() || 'min'}</span>
+            </div>
+          )}
+
+          {/* Start time display */}
+          {task.started_at && (
+            <div className="flex items-center gap-1">
+              <Play className="h-3.5 w-3.5" />
+              <span>Started: {new Date(task.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+            </div>
+          )}
+
+          {/* Actual time taken (shown after completion) */}
+          {task.actual_time_taken != null && task.actual_time_taken > 0 && (
+            <div className={`flex items-center gap-1 ${task.is_late ? 'text-orange-600 font-medium' : 'text-emerald-600'}`}>
+              <Clock className="h-3.5 w-3.5" />
+              <span>Took: {task.actual_time_taken} min</span>
             </div>
           )}
           
           {/* Deadline / Time remaining */}
-          {task.deadline && (
+          {task.deadline && !task.started_at && (
             <div className={`flex items-center gap-1 ${isOverdue || isNotCompleted ? 'text-red-600 font-medium' : ''}`}>
               {isOverdue || isNotCompleted ? <AlertCircle className="h-3.5 w-3.5" /> : <Clock className="h-3.5 w-3.5" />}
               <span>{getTimeDisplay()}</span>
