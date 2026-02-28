@@ -861,13 +861,10 @@ async def generate_recurring_now(db: Session = Depends(get_db),
 # ===================== TASK ENDPOINTS =====================
 def task_to_response(task: Task) -> dict:
     def format_datetime(dt):
-        """Format datetime to ISO string with UTC timezone"""
+        """Format datetime to ISO string in Sri Lanka timezone"""
         if dt is None:
             return None
-        # Ensure we return UTC format with Z suffix
-        iso = dt.isoformat()
-        if not iso.endswith('Z') and '+' not in iso:
-            iso += 'Z'  # Add Z to indicate UTC
+        return dt.isoformat()
         return iso
     
     return {
