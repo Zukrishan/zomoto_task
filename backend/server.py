@@ -160,7 +160,10 @@ class Task(Base):
     verified_by = Column(String(36))
     is_deleted = Column(Boolean, default=False, index=True)
     is_overdue = Column(Boolean, default=False)
+    is_late = Column(Boolean, default=False)
+    actual_time_taken = Column(Integer)  # minutes
     parent_task_id = Column(String(36))
+    template_id = Column(String(36))  # links to recurring template that generated this task
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
