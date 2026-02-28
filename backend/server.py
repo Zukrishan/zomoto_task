@@ -754,6 +754,9 @@ def task_to_response(task: Task) -> dict:
         "completed_at": format_datetime(task.completed_at),
         "verified_at": format_datetime(task.verified_at),
         "is_overdue": task.is_overdue,
+        "is_late": task.is_late or False,
+        "actual_time_taken": task.actual_time_taken,
+        "template_id": task.template_id,
         "created_at": format_datetime(task.created_at),
         "updated_at": format_datetime(task.updated_at)
     }
