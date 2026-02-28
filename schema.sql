@@ -35,9 +35,16 @@ CREATE TABLE IF NOT EXISTS task_templates (
     priority VARCHAR(20) DEFAULT 'MEDIUM',
     time_interval INT DEFAULT 30,
     time_unit VARCHAR(20) DEFAULT 'MINUTES',
+    is_recurring TINYINT(1) DEFAULT 0,
+    is_active TINYINT(1) DEFAULT 1,
+    day_intervals VARCHAR(255) DEFAULT NULL,
+    allocated_time VARCHAR(10) DEFAULT NULL,
+    assigned_to VARCHAR(36) DEFAULT NULL,
+    assigned_to_name VARCHAR(255) DEFAULT NULL,
     created_by VARCHAR(36) DEFAULT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (assigned_to) REFERENCES users(id) ON DELETE SET NULL
 );
 
 -- 4. Tasks
