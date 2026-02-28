@@ -65,8 +65,8 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
   
   // Action visibility (use normalized uppercase status)
   const canStart = taskStatus === 'PENDING' && isAssignedToMe;
-  const canUploadProof = taskStatus === 'IN_PROGRESS' && isAssignedToMe;
-  const canComplete = taskStatus === 'IN_PROGRESS' && isAssignedToMe && task.proof_photos?.length > 0;
+  const canUploadProof = ['IN_PROGRESS', 'NOT_COMPLETED'].includes(taskStatus) && isAssignedToMe;
+  const canComplete = ['IN_PROGRESS', 'NOT_COMPLETED'].includes(taskStatus) && isAssignedToMe && task.proof_photos?.length > 0;
   const canVerify = taskStatus === 'COMPLETED' && (isOwner || isManager);
   const hasProofPhotos = task.proof_photos && task.proof_photos.length > 0;
   const canAssign = (isOwner || isManager) && !task.assigned_to && taskStatus === 'PENDING';
