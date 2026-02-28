@@ -305,6 +305,23 @@ class TemplateCreate(BaseModel):
     priority: str = "MEDIUM"
     time_interval: int = 30
     time_unit: str = "MINUTES"
+    is_recurring: bool = False
+    day_intervals: Optional[str] = None  # e.g. "1-5,10-15"
+    allocated_time: Optional[str] = None  # e.g. "09:00"
+    assigned_to: Optional[str] = None
+
+class TemplateUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    priority: Optional[str] = None
+    time_interval: Optional[int] = None
+    time_unit: Optional[str] = None
+    is_recurring: Optional[bool] = None
+    is_active: Optional[bool] = None
+    day_intervals: Optional[str] = None
+    allocated_time: Optional[str] = None
+    assigned_to: Optional[str] = None
 
 class TemplateResponse(BaseModel):
     id: str
@@ -314,6 +331,12 @@ class TemplateResponse(BaseModel):
     priority: str
     time_interval: int
     time_unit: str
+    is_recurring: bool = False
+    is_active: bool = True
+    day_intervals: Optional[str] = None
+    allocated_time: Optional[str] = None
+    assigned_to: Optional[str] = None
+    assigned_to_name: Optional[str] = None
     created_at: datetime
 
     class Config:
