@@ -967,25 +967,39 @@ async def complete_task(task_id: str, db: Session = Depends(get_db), current_use
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     
-    if task.status != "IN_PROGRESS":
-        raise HTTPException(status_code=400, detail="Task can only be completed from IN_PROGRESS status")
+    # Allow completion from IN_PROGRESS or NOT_COMPLETED (late completion)
+    if task.status not in ("IN_PROGRESS", "NOT_COMPLETED"):
+        raise HTTPException(status_code=400, detail="Task can only be completed from IN_PROGRESS or NOT_COMPLETED status")
     
     if not task.proof_photos or len(task.proof_photos) == 0:
         raise HTTPException(status_code=400, detail="Proof photo required before completing")
     
+    now = datetime.utcnow()
+    is_late = task.status == "NOT_COMPLETED" or task.is_overdue or (task.deadline and now > task.deadline)
+    
+    # Calculate actual time taken in minutes
+    actual_time = None
+    if task.started_at:
+        delta = now - task.started_at
+        actual_time = int(delta.total_seconds() / 60)
+    
     task.status = "COMPLETED"
-    task.completed_at = datetime.utcnow()
+    task.completed_at = now
+    task.is_late = is_late
+    task.actual_time_taken = actual_time
     db.commit()
     db.refresh(task)
     
-    create_activity_log(db, task.id, current_user.id, current_user.name, "COMPLETED", "Task completed")
+    status_text = "completed (late)" if is_late else "completed"
+    create_activity_log(db, task.id, current_user.id, current_user.name, "COMPLETED", f"Task {status_text}")
     
     # Notify owner/managers
     managers = db.query(User).filter(User.role.in_(["OWNER", "MANAGER"]), User.status == "ACTIVE").all()
+    late_msg = " (Late)" if is_late else ""
     for mgr in managers:
         await create_notification(
             db, mgr.id, "TASK_COMPLETED", "Task Completed",
-            f"Task '{task.title}' has been completed and is ready for verification", task.id
+            f"Task '{task.title}' has been completed{late_msg} and is ready for verification", task.id
         )
     
     await manager.broadcast_to_all({
