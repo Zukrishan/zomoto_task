@@ -1427,7 +1427,7 @@ async def check_overdue_tasks():
     while True:
         try:
             db = SessionLocal()
-            now = datetime.utcnow()  # Use naive UTC to match MySQL stored datetimes
+            now = now_sl()  # Use SL time to match stored datetimes
             
             # Find IN_PROGRESS tasks that are overdue (only started tasks can be "overdue")
             # PENDING tasks just haven't been started yet - they're not overdue
