@@ -1491,6 +1491,7 @@ async def startup_event():
     logger.info("Starting Zomoto Tasks API with MySQL...")
     seed_default_data()
     asyncio.create_task(check_overdue_tasks())
+    asyncio.create_task(generate_recurring_tasks())
 
 def seed_default_data():
     """Seed default users and categories if they don't exist."""
