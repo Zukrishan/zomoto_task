@@ -1114,7 +1114,7 @@ async def complete_task(task_id: str, db: Session = Depends(get_db), current_use
     if not task.proof_photos or len(task.proof_photos) == 0:
         raise HTTPException(status_code=400, detail="Proof photo required before completing")
     
-    now = datetime.utcnow()
+    now = now_sl()
     is_late = task.status == "NOT_COMPLETED" or task.is_overdue or (task.deadline and now > task.deadline)
     
     # Calculate actual time taken in minutes
