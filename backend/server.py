@@ -1088,7 +1088,7 @@ async def start_task(task_id: str, db: Session = Depends(get_db), current_user: 
         raise HTTPException(status_code=403, detail="You are not assigned to this task")
     
     task.status = "IN_PROGRESS"
-    task.started_at = datetime.utcnow()
+    task.started_at = now_sl()
     db.commit()
     db.refresh(task)
     
