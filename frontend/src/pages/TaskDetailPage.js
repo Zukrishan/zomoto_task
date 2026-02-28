@@ -348,12 +348,12 @@ export default function TaskDetailPage() {
   const isOverdue = task.is_overdue;
   const isNotCompleted = taskStatus === 'NOT_COMPLETED';
   const canStartTask = (isStaff || isOwner || isManager) && taskStatus === 'PENDING' && task.assigned_to === user?.id;
-  const canCompleteTask = (isStaff || isOwner || isManager) && taskStatus === 'IN_PROGRESS' && task.assigned_to === user?.id;
+  const canCompleteTask = (isStaff || isOwner || isManager) && ['IN_PROGRESS', 'NOT_COMPLETED'].includes(taskStatus) && task.assigned_to === user?.id;
   const canVerify = (isOwner || isManager) && taskStatus === 'COMPLETED';
-  const canReassign = (isOwner || isManager) && !['VERIFIED', 'NOT_COMPLETED'].includes(taskStatus);
-  const canEdit = (isOwner || isManager) && !['VERIFIED', 'NOT_COMPLETED'].includes(taskStatus);
+  const canReassign = (isOwner || isManager) && !['VERIFIED'].includes(taskStatus);
+  const canEdit = (isOwner || isManager) && !['VERIFIED'].includes(taskStatus);
   const canDelete = (isOwner || isManager);
-  const canUploadProof = taskStatus === 'IN_PROGRESS' && task.assigned_to === user?.id;
+  const canUploadProof = ['IN_PROGRESS', 'NOT_COMPLETED'].includes(taskStatus) && task.assigned_to === user?.id;
   const hasProofPhotos = task.proof_photos && task.proof_photos.length > 0;
 
   return (
