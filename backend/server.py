@@ -782,7 +782,7 @@ def delete_template(template_id: str, db: Session = Depends(get_db),
 async def generate_recurring_now(db: Session = Depends(get_db),
                                   current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
     """Manually trigger recurring task generation for today."""
-    now = datetime.utcnow()
+    now = now_sl()
     today = now.date()
     today_day = today.day
     generated = 0
