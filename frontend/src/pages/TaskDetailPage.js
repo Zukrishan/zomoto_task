@@ -745,7 +745,7 @@ export default function TaskDetailPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-zinc-900 text-sm truncate">{attachment.filename}</p>
                         <p className="text-xs text-zinc-400">
-                          Uploaded by {attachment.uploaded_by_name} • {format(new Date(attachment.created_at), 'MMM d, h:mm a')}
+                          Uploaded by {attachment.uploaded_by_name} • {formatSLShort(attachment.created_at)}
                         </p>
                       </div>
                       <a
