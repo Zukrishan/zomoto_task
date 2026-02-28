@@ -526,7 +526,7 @@ export default function TaskDetailPage() {
                   <AlertCircle className={`h-4 w-4 ${isOverdue || isNotCompleted ? 'text-red-500' : 'text-zinc-400'}`} />
                   <span className={isOverdue || isNotCompleted ? 'text-red-600' : 'text-zinc-500'}>Deadline:</span>
                   <span className={`font-medium ${isOverdue || isNotCompleted ? 'text-red-700' : 'text-zinc-900'}`}>
-                    {format(new Date(task.deadline), 'PPp')}
+                    {formatSL(task.deadline)}
                     {!isOverdue && !isNotCompleted && task.status !== 'COMPLETED' && task.status !== 'VERIFIED' && (
                       <span className="text-zinc-500 ml-2">
                         ({formatDistanceToNow(new Date(task.deadline), { addSuffix: true })})
