@@ -125,7 +125,7 @@ class Category(Base):
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False)
     color = Column(String(50), default="#6B7280")
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=now_sl)
 
 class TaskTemplate(Base):
     __tablename__ = "task_templates"
@@ -144,7 +144,7 @@ class TaskTemplate(Base):
     assigned_to = Column(String(36), ForeignKey("users.id"))
     assigned_to_name = Column(String(255))
     created_by = Column(String(36), ForeignKey("users.id"))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=now_sl)
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -189,7 +189,7 @@ class TaskComment(Base):
     user_id = Column(String(36), ForeignKey("users.id"))
     user_name = Column(String(255))
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=now_sl)
 
 class TaskActivityLog(Base):
     __tablename__ = "task_activity_logs"
@@ -200,7 +200,7 @@ class TaskActivityLog(Base):
     user_name = Column(String(255))
     action = Column(String(100), nullable=False)
     details = Column(Text)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=now_sl)
 
 class Notification(Base):
     __tablename__ = "notifications"
@@ -212,7 +212,7 @@ class Notification(Base):
     message = Column(Text)
     task_id = Column(String(36))
     is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=now_sl)
 
 # Create all tables
 Base.metadata.create_all(bind=engine)
