@@ -951,7 +951,7 @@ async def create_task(task_data: TaskCreate, db: Session = Depends(get_db),
             assigned_to_name = assigned_user.name
     
     # Calculate deadline - use naive UTC datetimes for MySQL compatibility
-    allocated_datetime = task_data.allocated_datetime or datetime.utcnow()
+    allocated_datetime = task_data.allocated_datetime or now_sl()
     # Strip timezone info if provided (MySQL stores naive datetimes)
     if allocated_datetime.tzinfo is not None:
         allocated_datetime = allocated_datetime.replace(tzinfo=None)
