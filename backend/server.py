@@ -123,6 +123,12 @@ class TaskTemplate(Base):
     priority = Column(String(20), default="MEDIUM")
     time_interval = Column(Integer, default=30)
     time_unit = Column(String(20), default="MINUTES")
+    is_recurring = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    day_intervals = Column(String(255))  # e.g. "1-5,10-15"
+    allocated_time = Column(String(10))  # e.g. "09:00" (HH:MM 24h)
+    assigned_to = Column(String(36), ForeignKey("users.id"))
+    assigned_to_name = Column(String(255))
     created_by = Column(String(36), ForeignKey("users.id"))
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
