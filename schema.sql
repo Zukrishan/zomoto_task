@@ -75,6 +75,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     is_deleted TINYINT(1) DEFAULT 0,
     is_overdue TINYINT(1) DEFAULT 0,
     is_late TINYINT(1) DEFAULT 0,
+    is_archived TINYINT(1) DEFAULT 0,
+    archived_at DATETIME DEFAULT NULL,
     actual_time_taken INT DEFAULT NULL,
     parent_task_id VARCHAR(36) DEFAULT NULL,
     template_id VARCHAR(36) DEFAULT NULL,
