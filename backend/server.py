@@ -895,6 +895,8 @@ def task_to_response(task: Task) -> dict:
         "verified_at": format_datetime(task.verified_at),
         "is_overdue": task.is_overdue,
         "is_late": task.is_late or False,
+        "is_archived": task.is_archived or False,
+        "archived_at": format_datetime(task.archived_at) if hasattr(task, 'archived_at') else None,
         "actual_time_taken": task.actual_time_taken,
         "template_id": task.template_id,
         "created_at": format_datetime(task.created_at),
