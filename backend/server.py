@@ -1236,6 +1236,69 @@ async def delete_task(task_id: str, db: Session = Depends(get_db),
     
     return {"message": "Task deleted"}
 
+# ===================== REPORTS =====================
+@api_router.get("/reports/tasks")
+def get_task_reports(
+    status: str = None,
+    category: str = None,
+    priority: str = None,
+    assigned_to: str = None,
+    date_from: str = None,
+    date_to: str = None,
+    include_archived: bool = True,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))
+):
+    """Get all tasks for reporting, including archived/verified tasks."""
+    query = db.query(Task).filter(Task.is_deleted == False)
+    
+    if not include_archived:
+        query = query.filter(Task.is_archived == False)
+    
+    if status:
+        query = query.filter(Task.status == status)
+    if category:
+        query = query.filter(Task.category == category)
+    if priority:
+        query = query.filter(Task.priority == priority)
+    if assigned_to:
+        query = query.filter(Task.assigned_to == assigned_to)
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, "%Y-%m-%d")
+            query = query.filter(Task.created_at >= from_date)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            query = query.filter(Task.created_at < to_date)
+        except ValueError:
+            pass
+    
+    tasks = query.order_by(Task.created_at.desc()).all()
+    
+    # Summary stats
+    total = len(tasks)
+    verified_count = sum(1 for t in tasks if t.status == "VERIFIED")
+    completed_count = sum(1 for t in tasks if t.status == "COMPLETED")
+    late_count = sum(1 for t in tasks if t.is_late)
+    overdue_count = sum(1 for t in tasks if t.is_overdue)
+    
+    return {
+        "tasks": [task_to_response(t) for t in tasks],
+        "summary": {
+            "total": total,
+            "verified": verified_count,
+            "completed": completed_count,
+            "late": late_count,
+            "overdue": overdue_count,
+            "pending": sum(1 for t in tasks if t.status == "PENDING"),
+            "in_progress": sum(1 for t in tasks if t.status == "IN_PROGRESS"),
+            "not_completed": sum(1 for t in tasks if t.status == "NOT_COMPLETED"),
+        }
+    }
+
 # ===================== TASK COMMENTS =====================
 @api_router.get("/tasks/{task_id}/comments", response_model=List[CommentResponse])
 def get_task_comments(task_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
