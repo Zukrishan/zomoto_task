@@ -680,7 +680,7 @@ export default function TaskDetailPage() {
                     <div className="flex justify-between items-start mb-2">
                       <span className="font-medium text-zinc-900">{comment.user_name}</span>
                       <span className="text-xs text-zinc-400">
-                        {format(new Date(comment.created_at), 'PPp')}
+                        {formatSLShort(comment.created_at)}
                       </span>
                     </div>
                     <p className="text-sm text-zinc-600">{comment.content}</p>
