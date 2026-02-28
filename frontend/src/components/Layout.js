@@ -7,7 +7,8 @@ import {
   LogOut,
   Menu,
   X,
-  Tags
+  Tags,
+  BarChart3
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
