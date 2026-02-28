@@ -762,6 +762,86 @@ def delete_template(template_id: str, db: Session = Depends(get_db),
     db.commit()
     return {"message": "Template deleted"}
 
+@api_router.post("/task-templates/generate-now")
+async def generate_recurring_now(db: Session = Depends(get_db),
+                                  current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    """Manually trigger recurring task generation for today."""
+    now = datetime.utcnow()
+    today = now.date()
+    today_day = today.day
+    generated = 0
+    
+    templates = db.query(TaskTemplate).filter(
+        TaskTemplate.is_recurring == True,
+        TaskTemplate.is_active == True
+    ).all()
+    
+    for tmpl in templates:
+        scheduled_days = parse_day_intervals(tmpl.day_intervals)
+        if not scheduled_days or today_day not in scheduled_days:
+            continue
+        
+        today_start = datetime.combine(today, datetime.min.time())
+        today_end = datetime.combine(today, datetime.max.time())
+        existing = db.query(Task).filter(
+            Task.template_id == tmpl.id,
+            Task.created_at >= today_start,
+            Task.created_at <= today_end,
+            Task.is_deleted == False
+        ).first()
+        
+        if existing:
+            continue
+        
+        date_str = today.strftime("%b %d")
+        time_str = ""
+        if tmpl.allocated_time:
+            try:
+                t = datetime.strptime(tmpl.allocated_time, "%H:%M")
+                time_str = " " + t.strftime("%I:%M %p")
+            except ValueError:
+                pass
+        task_title = f"{tmpl.title} ({date_str}{time_str})"
+        
+        if tmpl.allocated_time:
+            try:
+                hour, minute = map(int, tmpl.allocated_time.split(":"))
+                allocated_dt = datetime.combine(today, datetime.min.time()).replace(hour=hour, minute=minute)
+            except ValueError:
+                allocated_dt = now
+        else:
+            allocated_dt = now
+        
+        interval = tmpl.time_interval or 30
+        unit = (tmpl.time_unit or "MINUTES").upper()
+        if unit == "HOURS":
+            deadline = allocated_dt + timedelta(hours=interval)
+        else:
+            deadline = allocated_dt + timedelta(minutes=interval)
+        
+        task = Task(
+            title=task_title,
+            description=tmpl.description,
+            category=tmpl.category,
+            priority=(tmpl.priority or "MEDIUM").upper(),
+            status="PENDING",
+            task_type="RECURRING",
+            time_interval=interval,
+            time_unit=unit,
+            allocated_datetime=allocated_dt,
+            deadline=deadline,
+            assigned_to=tmpl.assigned_to,
+            assigned_to_name=tmpl.assigned_to_name,
+            created_by=tmpl.created_by,
+            created_by_name="System",
+            template_id=tmpl.id,
+        )
+        db.add(task)
+        generated += 1
+    
+    db.commit()
+    return {"message": f"Generated {generated} recurring tasks for today"}
+
 # ===================== TASK ENDPOINTS =====================
 def task_to_response(task: Task) -> dict:
     def format_datetime(dt):
