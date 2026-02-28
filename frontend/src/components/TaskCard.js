@@ -326,7 +326,7 @@ export default function TaskCard({ task, onClick, onTaskUpdate, currentUser, onL
           {task.started_at && (
             <div className="flex items-center gap-1">
               <Play className="h-3.5 w-3.5" />
-              <span>Started: {new Date(task.started_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+              <span>Started: {new Date(task.started_at).toLocaleTimeString('en-LK', { timeZone: 'Asia/Colombo', hour: '2-digit', minute: '2-digit', hour12: true })}</span>
             </div>
           )}
 
