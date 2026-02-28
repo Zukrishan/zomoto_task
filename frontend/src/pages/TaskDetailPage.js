@@ -515,7 +515,7 @@ export default function TaskDetailPage() {
                   <Calendar className="h-4 w-4 text-zinc-400" />
                   <span className="text-zinc-500">Allocated:</span>
                   <span className="font-medium text-zinc-900">
-                    {format(new Date(task.allocated_datetime), 'PPp')}
+                    {formatSL(task.allocated_datetime)}
                   </span>
                 </div>
               )}
