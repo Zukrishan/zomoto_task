@@ -175,11 +175,13 @@ class Task(Base):
     is_deleted = Column(Boolean, default=False, index=True)
     is_overdue = Column(Boolean, default=False)
     is_late = Column(Boolean, default=False)
+    is_archived = Column(Boolean, default=False, index=True)
+    archived_at = Column(DateTime)
     actual_time_taken = Column(Integer)  # minutes
     parent_task_id = Column(String(36))
     template_id = Column(String(36))  # links to recurring template that generated this task
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), index=True)
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=now_sl, index=True)
+    updated_at = Column(DateTime, default=now_sl, onupdate=now_sl)
 
 class TaskComment(Base):
     __tablename__ = "task_comments"
