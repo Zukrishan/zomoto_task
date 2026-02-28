@@ -778,7 +778,7 @@ export default function TaskDetailPage() {
                       {' '}{log.details}
                     </p>
                     <p className="text-xs text-zinc-400">
-                      {format(new Date(log.created_at), 'PPp')}
+                      {formatSLShort(log.created_at)}
                     </p>
                   </div>
                 </div>
