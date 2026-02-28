@@ -161,7 +161,11 @@ export default function NotificationBell() {
                         {notification.message}
                       </p>
                       <p className="text-xs text-zinc-400 mt-1">
-                        {format(new Date(notification.created_at), 'MMM d, h:mm a')}
+                        {new Date(notification.created_at).toLocaleString('en-LK', {
+                          timeZone: 'Asia/Colombo',
+                          month: 'short', day: 'numeric',
+                          hour: 'numeric', minute: '2-digit', hour12: true
+                        })}
                       </p>
                     </div>
                     {!notification.is_read && (
