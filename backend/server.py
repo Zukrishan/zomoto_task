@@ -1361,6 +1361,130 @@ async def check_overdue_tasks():
         
         await asyncio.sleep(60)  # Check every minute
 
+def parse_day_intervals(day_intervals_str: str) -> set:
+    """Parse day interval string like '1-5,10-15,20' into a set of day numbers."""
+    days = set()
+    if not day_intervals_str:
+        return days
+    for part in day_intervals_str.split(","):
+        part = part.strip()
+        if "-" in part:
+            try:
+                start, end = part.split("-", 1)
+                for d in range(int(start.strip()), int(end.strip()) + 1):
+                    if 1 <= d <= 31:
+                        days.add(d)
+            except ValueError:
+                continue
+        else:
+            try:
+                d = int(part)
+                if 1 <= d <= 31:
+                    days.add(d)
+            except ValueError:
+                continue
+    return days
+
+async def generate_recurring_tasks():
+    """Background job: generate task instances from active recurring templates."""
+    while True:
+        try:
+            db = SessionLocal()
+            now = datetime.utcnow()
+            today = now.date()
+            today_day = today.day
+            
+            # Get all active recurring templates
+            templates = db.query(TaskTemplate).filter(
+                TaskTemplate.is_recurring == True,
+                TaskTemplate.is_active == True
+            ).all()
+            
+            for tmpl in templates:
+                # Check if today falls within the day intervals
+                scheduled_days = parse_day_intervals(tmpl.day_intervals)
+                if not scheduled_days or today_day not in scheduled_days:
+                    continue
+                
+                # Check if a task was already generated today for this template
+                today_start = datetime.combine(today, datetime.min.time())
+                today_end = datetime.combine(today, datetime.max.time())
+                existing = db.query(Task).filter(
+                    Task.template_id == tmpl.id,
+                    Task.created_at >= today_start,
+                    Task.created_at <= today_end,
+                    Task.is_deleted == False
+                ).first()
+                
+                if existing:
+                    continue  # Already generated today
+                
+                # Build title with date and time
+                date_str = today.strftime("%b %d")
+                time_str = ""
+                if tmpl.allocated_time:
+                    try:
+                        t = datetime.strptime(tmpl.allocated_time, "%H:%M")
+                        time_str = " " + t.strftime("%I:%M %p")
+                    except ValueError:
+                        time_str = ""
+                task_title = f"{tmpl.title} ({date_str}{time_str})"
+                
+                # Calculate allocated_datetime and deadline
+                if tmpl.allocated_time:
+                    try:
+                        hour, minute = map(int, tmpl.allocated_time.split(":"))
+                        allocated_dt = datetime.combine(today, datetime.min.time()).replace(hour=hour, minute=minute)
+                    except ValueError:
+                        allocated_dt = now
+                else:
+                    allocated_dt = now
+                
+                interval = tmpl.time_interval or 30
+                unit = (tmpl.time_unit or "MINUTES").upper()
+                if unit == "HOURS":
+                    deadline = allocated_dt + timedelta(hours=interval)
+                else:
+                    deadline = allocated_dt + timedelta(minutes=interval)
+                
+                task = Task(
+                    title=task_title,
+                    description=tmpl.description,
+                    category=tmpl.category,
+                    priority=(tmpl.priority or "MEDIUM").upper(),
+                    status="PENDING",
+                    task_type="RECURRING",
+                    time_interval=interval,
+                    time_unit=unit,
+                    allocated_datetime=allocated_dt,
+                    deadline=deadline,
+                    assigned_to=tmpl.assigned_to,
+                    assigned_to_name=tmpl.assigned_to_name,
+                    created_by=tmpl.created_by,
+                    created_by_name="System",
+                    template_id=tmpl.id,
+                )
+                db.add(task)
+                logger.info(f"Generated recurring task: {task_title} from template {tmpl.id}")
+                
+                # Notify assigned staff
+                if tmpl.assigned_to:
+                    notification = Notification(
+                        user_id=tmpl.assigned_to,
+                        type="TASK_ASSIGNED",
+                        title="New Recurring Task",
+                        message=f"Recurring task '{task_title}' has been assigned to you",
+                        task_id=task.id
+                    )
+                    db.add(notification)
+            
+            db.commit()
+            db.close()
+        except Exception as e:
+            logger.error(f"Error generating recurring tasks: {e}")
+        
+        await asyncio.sleep(300)  # Check every 5 minutes
+
 # ===================== APP STARTUP =====================
 @app.on_event("startup")
 async def startup_event():
