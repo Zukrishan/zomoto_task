@@ -116,8 +116,8 @@ class User(Base):
     role = Column(String(20), default="STAFF")
     status = Column(String(20), default="ACTIVE")
     hashed_password = Column(String(255), nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=now_sl)
+    updated_at = Column(DateTime, default=now_sl, onupdate=now_sl)
 
 class Category(Base):
     __tablename__ = "categories"
