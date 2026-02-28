@@ -904,7 +904,7 @@ def task_to_response(task: Task) -> dict:
 @api_router.get("/tasks")
 def get_tasks(status: str = None, category: str = None, priority: str = None, assigned_to: str = None,
               db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    query = db.query(Task).filter(Task.is_deleted == False)
+    query = db.query(Task).filter(Task.is_deleted == False, Task.is_archived == False)
     
     # Role-based filtering
     if current_user.role == "STAFF":
@@ -920,8 +920,8 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
         query = query.filter(Task.assigned_to == assigned_to)
     
     # Filter recurring tasks by day and time
-    now = datetime.now(timezone.utc)
-    now_naive = now.replace(tzinfo=None)  # For comparison with naive datetimes from DB
+    now = now_sl()
+    now_naive = now  # Already naive SL time
     today = now.day
     
     tasks = query.order_by(Task.created_at.desc()).all()
