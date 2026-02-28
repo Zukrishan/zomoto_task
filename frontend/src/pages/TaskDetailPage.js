@@ -28,6 +28,16 @@ import { format, formatDistanceToNow } from 'date-fns';
 import { useAuth } from '../context/AuthContext';
 import { useWebSocket, useWebSocketEvent } from '../context/WebSocketContext';
 import api, { getErrorMessage } from '../lib/api';
+
+const SL_OPTS = { timeZone: 'Asia/Colombo' };
+const formatSL = (dateStr) => {
+  if (!dateStr) return '-';
+  return new Date(dateStr).toLocaleString('en-LK', { ...SL_OPTS, day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true });
+};
+const formatSLShort = (dateStr) => {
+  if (!dateStr) return '-';
+  return new Date(dateStr).toLocaleString('en-LK', { ...SL_OPTS, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true });
+};
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
