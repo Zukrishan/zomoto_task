@@ -542,7 +542,7 @@ export default function TaskDetailPage() {
                   <Play className="h-4 w-4 text-zinc-400" />
                   <span className="text-zinc-500">Started:</span>
                   <span className="font-medium text-zinc-900">
-                    {format(new Date(task.start_time), 'PPp')}
+                    {formatSL(task.start_time)}
                   </span>
                 </div>
               )}
