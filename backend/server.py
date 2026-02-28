@@ -1160,8 +1160,10 @@ async def verify_task(task_id: str, db: Session = Depends(get_db),
         raise HTTPException(status_code=400, detail="Only completed tasks can be verified")
     
     task.status = "VERIFIED"
-    task.verified_at = datetime.utcnow()
+    task.verified_at = now_sl()
     task.verified_by = current_user.id
+    task.is_archived = True
+    task.archived_at = now_sl()
     db.commit()
     db.refresh(task)
     
