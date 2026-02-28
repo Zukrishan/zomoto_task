@@ -167,7 +167,7 @@ export default function Layout({ children }) {
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-zinc-200 z-30 safe-area-bottom">
         <div className="flex justify-around py-2">
-          {navItems.filter(item => item.show).slice(0, 4).map(({ to, icon: Icon, label }) => (
+          {navItems.filter(item => item.show).slice(0, 5).map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
