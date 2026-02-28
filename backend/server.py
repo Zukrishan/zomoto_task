@@ -1488,7 +1488,7 @@ async def generate_recurring_tasks():
     while True:
         try:
             db = SessionLocal()
-            now = datetime.utcnow()
+            now = now_sl()
             today = now.date()
             today_day = today.day
             
