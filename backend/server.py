@@ -865,7 +865,6 @@ def task_to_response(task: Task) -> dict:
         if dt is None:
             return None
         return dt.isoformat()
-        return iso
     
     return {
         "id": task.id,
