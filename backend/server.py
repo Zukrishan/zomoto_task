@@ -22,6 +22,20 @@ from PIL import Image
 import asyncio
 import json
 import enum
+from zoneinfo import ZoneInfo
+
+# Sri Lanka timezone (Asia/Colombo = UTC+5:30)
+SL_TZ = ZoneInfo("Asia/Colombo")
+
+def now_sl():
+    """Get current time in Sri Lanka timezone, returned as naive datetime for MySQL storage."""
+    return datetime.now(SL_TZ).replace(tzinfo=None)
+
+def to_sl_iso(dt):
+    """Convert a naive datetime (assumed SL time) to ISO string."""
+    if dt is None:
+        return None
+    return dt.isoformat()
 
 import subprocess
 
