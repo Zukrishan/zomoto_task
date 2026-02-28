@@ -31,6 +31,7 @@ export default function Layout({ children }) {
     { to: '/users', icon: Users, label: 'Team', show: isOwner },
     { to: '/task-library', icon: BookOpen, label: 'Library', show: isOwner || isManager },
     { to: '/categories', icon: Tags, label: 'Categories', show: isOwner || isManager },
+    { to: '/reports', icon: BarChart3, label: 'Reports', show: isOwner || isManager },
   ];
 
   const NavItem = ({ to, icon: Icon, label }) => (
