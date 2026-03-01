@@ -162,11 +162,12 @@ All endpoints prefixed with `/api`
 - ✅ Added auto-seed for default users and categories on fresh DB
 - ✅ Verified task editing works end-to-end after MySQL migration
 
-## Features & Fixes (Feb 23, 2026)
-- ✅ Added MySQL auto-start script (`ensure_mysql.sh`) so MySQL persists across environment restarts
-- ✅ Added "Assign to Staff" button on unassigned task cards — shows staff dropdown for quick assignment
-- ✅ Fixed "Mark all read" notifications — frontend called `PUT /notifications/read-all` but backend had `POST /notifications/mark-all-read`
-- ✅ Fixed single notification mark-read — added `PUT /notifications/{id}/read` endpoint
+## Features & Fixes (Feb 28, 2026)
+- ✅ **Recurring Task Redesign**: Task Library now manages recurring rules with day-interval schedules. Background job auto-generates daily task instances on scheduled days. Title format: "Task Name (Mar 01 09:00 AM)"
+- ✅ **Late Task Completion**: Staff can complete tasks even after deadline. Tasks marked as NOT_COMPLETED can still be completed with "Late" badge. Actual time taken is tracked.
+- ✅ **Task Card Enhancements**: Shows "Allowed: X min", "Started: HH:MM", "Took: X min", and "Late" badge
+- ✅ **Generate Now**: Manual trigger for recurring task generation from Library page
+- ✅ **Template Edit/Toggle**: Templates can be edited and recurring rules can be paused/activated
 
 ## Prioritized Backlog
 

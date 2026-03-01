@@ -359,7 +359,8 @@ export default function TaskDetailPage() {
 
   if (!task) return null;
 
-  // New lifecycle conditions
+  // New lifecycle conditions (case-insensitive)
+  const taskStatus = (task.status || "").toUpperCase();
   const isOverdue = task.is_overdue;
   const isNotCompleted = task.status === "NOT_COMPLETED";
   const canStartTask =
@@ -886,12 +887,10 @@ export default function TaskDetailPage() {
                           </p>
                           <p className="text-xs text-zinc-400">
                             Uploaded by {attachment.uploaded_by_name} •{" "}
-                            {attachment.created_at
-                              ? format(
-                                  new Date(attachment.created_at),
-                                  "MMM d, h:mm a",
-                                )
-                              : "Date unavailable"}
+                            {format(
+                              new Date(attachment.created_at),
+                              "MMM d, h:mm a",
+                            )}
                           </p>
                         </div>
                         <a

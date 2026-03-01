@@ -343,6 +343,14 @@ export default function TaskCard({
           >
             {STATUS_CONFIG[task.status]?.label}
           </Badge>
+          {task.is_late && (
+            <Badge
+              className="bg-orange-100 text-orange-700"
+              data-testid="task-late-badge"
+            >
+              Late
+            </Badge>
+          )}
         </div>
 
         <div className="flex items-center gap-4 mt-3 text-sm text-zinc-500 flex-wrap">
