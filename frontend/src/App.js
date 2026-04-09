@@ -9,6 +9,7 @@ import TaskDetailPage from "./pages/TaskDetailPage";
 import UsersPage from "./pages/UsersPage";
 import TaskLibraryPage from "./pages/TaskLibraryPage";
 import CategoriesPage from "./pages/CategoriesPage";
+import ReportsPage from "./pages/ReportsPage";
 import "./App.css";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -67,6 +68,11 @@ function AppRoutes() {
       <Route path="/categories" element={
         <ProtectedRoute allowedRoles={["OWNER", "MANAGER"]}>
           <CategoriesPage />
+        </ProtectedRoute>
+      } />
+      <Route path="/reports" element={
+        <ProtectedRoute allowedRoles={["OWNER", "MANAGER"]}>
+          <ReportsPage />
         </ProtectedRoute>
       } />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

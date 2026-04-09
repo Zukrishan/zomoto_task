@@ -7,7 +7,8 @@ import {
   LogOut,
   Menu,
   X,
-  Tags
+  Tags,
+  BarChart3
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -30,6 +31,7 @@ export default function Layout({ children }) {
     { to: '/users', icon: Users, label: 'Team', show: isOwner },
     { to: '/task-library', icon: BookOpen, label: 'Library', show: isOwner || isManager },
     { to: '/categories', icon: Tags, label: 'Categories', show: isOwner || isManager },
+    { to: '/reports', icon: BarChart3, label: 'Reports', show: isOwner || isManager },
   ];
 
   const NavItem = ({ to, icon: Icon, label }) => (
@@ -165,7 +167,7 @@ export default function Layout({ children }) {
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-zinc-200 z-30 safe-area-bottom">
         <div className="flex justify-around py-2">
-          {navItems.filter(item => item.show).slice(0, 4).map(({ to, icon: Icon, label }) => (
+          {navItems.filter(item => item.show).slice(0, 5).map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
