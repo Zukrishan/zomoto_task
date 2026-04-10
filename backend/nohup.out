@@ -1,0 +1,12 @@
+INFO:     Started server process [875345]
+INFO:     Waiting for application startup.
+2026-03-02 17:56:39,490 - server - INFO - Starting Zomoto Tasks API with MySQL...
+2026-03-02 18:04:09,854 - server - ERROR - Error generating recurring tasks: (pymysql.err.OperationalError) (1054, "Unknown column 'task_templates.is_recurring' in 'field list'")
+[SQL: SELECT task_templates.id AS task_templates_id, task_templates.title AS task_templates_title, task_templates.description AS task_templates_description, task_templates.category AS task_templates_category, task_templates.priority AS task_templates_priority, task_templates.time_interval AS task_templates_time_interval, task_templates.time_unit AS task_templates_time_unit, task_templates.is_recurring AS task_templates_is_recurring, task_templates.is_active AS task_templates_is_active, task_templates.day_intervals AS task_templates_day_intervals, task_templates.allocated_time AS task_templates_allocated_time, task_templates.assigned_to AS task_templates_assigned_to, task_templates.assigned_to_name AS task_templates_assigned_to_name, task_templates.created_by AS task_templates_created_by, task_templates.created_at AS task_templates_created_at 
+FROM task_templates 
+WHERE task_templates.is_recurring = true AND task_templates.is_active = true]
+(Background on this error at: https://sqlalche.me/e/20/e3q8)
+INFO:     Application startup complete.
+ERROR:    [Errno 98] error while attempting to bind on address ('0.0.0.0', 8000): address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.

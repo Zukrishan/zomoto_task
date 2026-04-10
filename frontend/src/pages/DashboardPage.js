@@ -36,7 +36,7 @@ export default function DashboardPage() {
         api.get('/tasks')
       ]);
       setStats(statsRes.data);
-      setRecentTasks(tasksRes.data.slice(0, 5));
+      setRecentTasks((tasksRes.data.tasks || []).slice(0, 5));
     } catch (error) {
       console.error('Failed to fetch dashboard data:', error);
     } finally {
@@ -97,7 +97,7 @@ export default function DashboardPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-zinc-900" data-testid="greeting">
-              Hello, {user?.name?.split(' ')[0]} 👋
+              Hello, {user?.name?.split(' ')[0]}
             </h1>
             <p className="text-sm text-zinc-500 mt-1">
               {isOwner && 'Restaurant Owner Dashboard'}

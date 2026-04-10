@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { BarChart3, Calendar, Clock, User, Filter, Download, CheckCircle2, AlertCircle, Timer, Eye, ShieldCheck } from 'lucide-react';
+import { BarChart3, Calendar, Clock, User, Filter, Download, CheckCircle2, AlertCircle, Timer, Eye, ShieldCheck, XCircle } from 'lucide-react';
 import api, { getErrorMessage } from '../lib/api';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
@@ -43,6 +43,8 @@ const formatSLDate = (dateStr) => {
 
 export default function ReportsPage() {
   const [data, setData] = useState({ tasks: [], summary: {} });
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
   const [loading, setLoading] = useState(true);
   const [staffList, setStaffList] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -60,8 +62,12 @@ export default function ReportsPage() {
   }, []);
 
   useEffect(() => {
-    fetchReport();
+    setCurrentPage(1);
   }, [filters]);
+
+  useEffect(() => {
+    fetchReport();
+  }, [filters, currentPage]);
 
   const fetchStaff = async () => {
     try { const r = await api.get('/users'); setStaffList(r.data); } catch {}
@@ -81,6 +87,8 @@ export default function ReportsPage() {
       if (filters.date_from) params.append('date_from', filters.date_from);
       if (filters.date_to) params.append('date_to', filters.date_to);
 
+      params.append('limit', PAGE_SIZE);
+      params.append('offset', (currentPage - 1) * PAGE_SIZE);
       const response = await api.get(`/reports/tasks?${params.toString()}`);
       setData(response.data);
     } catch (error) {
@@ -171,6 +179,30 @@ export default function ReportsPage() {
             {data.tasks.map(task => (
               <ReportTaskRow key={task.id} task={task} />
             ))}
+
+  {/* Pagination */}
+        {data.total > PAGE_SIZE && (
+          <div className="flex items-center justify-center gap-2 py-4">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 rounded-full border border-zinc-200 text-sm disabled:opacity-40 hover:bg-zinc-50"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-zinc-500">
+              Page {currentPage} of {Math.ceil(data.total / PAGE_SIZE)}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => p + 1)}
+              disabled={currentPage >= Math.ceil(data.total / PAGE_SIZE)}
+              className="px-4 py-2 rounded-full border border-zinc-200 text-sm disabled:opacity-40 hover:bg-zinc-50"
+            >
+              Next
+            </button>
+          </div>
+        )}
+
           </div>
         )}
       </div>
@@ -227,6 +259,13 @@ function ReportTaskRow({ task }) {
               {task.completed_at && <span>Completed: {formatSLTime(task.completed_at)}</span>}
               {task.verified_at && <span>Verified: {formatSLTime(task.verified_at)}</span>}
             </div>
+           {/* Rejection Reason */}
+            {task.rejection_reason && (
+              <div className="mt-1.5 flex items-start gap-1 text-xs text-red-600 bg-red-50 rounded-lg px-2 py-1">
+                <XCircle className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                <span><strong>Rejection reason:</strong> {task.rejection_reason}</span>
+              </div>
+            )}
             {/* Proof thumbnails */}
             {task.proof_photos && task.proof_photos.length > 0 && (
               <div className="flex items-center gap-1 mt-1.5">

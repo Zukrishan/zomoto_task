@@ -5,6 +5,7 @@ import api, { getErrorMessage } from '../lib/api';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
+import { Textarea } from '../components/ui/textarea';
 import { Card, CardContent } from '../components/ui/card';
 import { Badge } from '../components/ui/badge';
 import {
@@ -23,7 +24,6 @@ import {
 } from '../components/ui/select';
 import { Switch } from '../components/ui/switch';
 
-const CATEGORY_OPTIONS = ['Kitchen', 'Cleaning', 'Maintenance', 'Other'];
 const PRIORITY_OPTIONS = ['HIGH', 'MEDIUM', 'LOW'];
 const PRIORITY_COLORS = {
   HIGH: 'bg-red-100 text-red-700',
@@ -36,6 +36,7 @@ const PRIORITY_COLORS = {
 
 const DEFAULT_FORM = {
   title: '',
+  description: '',
   category: 'Other',
   priority: 'MEDIUM',
   time_interval: 30,
@@ -49,6 +50,7 @@ const DEFAULT_FORM = {
 export default function TaskLibraryPage() {
   const [templates, setTemplates] = useState([]);
   const [staffList, setStaffList] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [showCreate, setShowCreate] = useState(false);
@@ -60,6 +62,7 @@ export default function TaskLibraryPage() {
   useEffect(() => {
     fetchTemplates();
     fetchStaff();
+    fetchCategories();
   }, []);
 
   const fetchTemplates = async () => {
@@ -71,6 +74,13 @@ export default function TaskLibraryPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchCategories = async () => {
+    try {
+      const response = await api.get('/categories');
+      setCategories(response.data.map(c => c.name));
+    } catch { /* ignore */ }
   };
 
   const fetchStaff = async () => {
@@ -118,6 +128,7 @@ export default function TaskLibraryPage() {
     setEditingTemplate(template);
     setFormData({
       title: template.title || '',
+      description: template.description || '',
       category: template.category || 'Other',
       priority: template.priority || 'MEDIUM',
       time_interval: template.time_interval || 30,
@@ -300,6 +311,17 @@ export default function TaskLibraryPage() {
                 data-testid="template-name-input"
               />
             </div>
+	     
+	    <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea
+                value={formData.description || ''}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                placeholder="Optional description..."
+                className="rounded-xl resize-none h-20"
+              />
+            </div>
+
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2">
@@ -309,7 +331,7 @@ export default function TaskLibraryPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORY_OPTIONS.map(cat => (
+                    {categories.map(cat => (
                       <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                     ))}
                   </SelectContent>

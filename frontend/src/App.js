@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./context/AuthContext";
@@ -11,6 +12,8 @@ import TaskLibraryPage from "./pages/TaskLibraryPage";
 import CategoriesPage from "./pages/CategoriesPage";
 import ReportsPage from "./pages/ReportsPage";
 import "./App.css";
+import { requestNotificationPermission } from "./firebase";
+import api from "./lib/api";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { user, loading } = useAuth();
@@ -36,6 +39,16 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
 
 function AppRoutes() {
   const { user } = useAuth();
+
+  useEffect(() => {
+    if (user) {
+      requestNotificationPermission().then((token) => {
+        if (token) {
+          api.post("/fcm-token", { token }).catch(() => {});
+        }
+      });
+    }
+  }, [user]);
   
   return (
     <Routes>

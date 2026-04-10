@@ -97,6 +97,7 @@ export default function TaskDetailPage() {
   const { taskId } = useParams();
   const navigate = useNavigate();
   const { user, isOwner, isManager, isStaff } = useAuth();
+  const isSupervisor = user?.role === "SUPERVISOR";
   const { isConnected } = useWebSocket();
   const [task, setTask] = useState(null);
   const [comments, setComments] = useState([]);
@@ -122,9 +123,12 @@ export default function TaskDetailPage() {
       setActivityLog(activityRes.data);
       // Attachments are stored in the task object itself
       setAttachments(taskRes.data.attachments || []);
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to load task"));
-      navigate("/tasks");
+    }catch (error) {
+      // Only show error and navigate if it's the initial load
+      if (!task) {
+        toast.error(getErrorMessage(error, "Failed to load task"));
+        navigate("/tasks");
+      }
     } finally {
       setLoading(false);
     }
@@ -371,9 +375,9 @@ export default function TaskDetailPage() {
     (isStaff || isOwner || isManager) &&
     task.status === "IN_PROGRESS" &&
     task.assigned_to === user?.id;
-  const canVerify = (isOwner || isManager) && task.status === "COMPLETED";
+  const canVerify = (isOwner || isManager || (isSupervisor && task.parent_task_id)) && task.status === "COMPLETED";
   const canReassign =
-    (isOwner || isManager) &&
+    (isOwner || isManager || (isSupervisor && task.created_by === user?.id)) &&
     !["VERIFIED", "NOT_COMPLETED"].includes(task.status);
   const canEdit =
     (isOwner || isManager) &&
@@ -673,40 +677,8 @@ export default function TaskDetailPage() {
         {/* Proof Photos Section - Required for completion */}
         {(canUploadProof || hasProofPhotos) && (
           <Card className="bg-white rounded-2xl border border-zinc-100 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Camera className="h-5 w-5 text-[#E23744]" />
-                Proof Photos
-                {canCompleteTask && !hasProofPhotos && (
-                  <Badge
-                    variant="outline"
-                    className="text-amber-600 border-amber-300"
-                  >
-                    Required
-                  </Badge>
-                )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {/* Proof photo upload */}
-              {canUploadProof && (
-                <label className="cursor-pointer mb-4 block">
-                  <div className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-amber-300 rounded-xl hover:border-[#E23744] bg-amber-50 transition-colors">
-                    <Camera className="h-5 w-5 text-amber-500" />
-                    <span className="text-amber-700 font-medium">
-                      Upload Proof Photo
-                    </span>
-                  </div>
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={handleProofUpload}
-                    accept="image/*"
-                    data-testid="proof-upload-input"
-                  />
-                </label>
-              )}
-
+ 
+            
               {/* Display proof photos */}
               {hasProofPhotos && (
                 <div className="grid grid-cols-2 gap-2">
@@ -728,7 +700,7 @@ export default function TaskDetailPage() {
                   No proof photos uploaded yet
                 </p>
               )}
-            </CardContent>
+          
           </Card>
         )}
 
@@ -743,14 +715,7 @@ export default function TaskDetailPage() {
               <MessageSquare className="h-4 w-4 mr-2" />
               Comments
             </TabsTrigger>
-            <TabsTrigger
-              value="attachments"
-              className="rounded-lg"
-              data-testid="attachments-tab"
-            >
-              <Paperclip className="h-4 w-4 mr-2" />
-              Files
-            </TabsTrigger>
+         
             <TabsTrigger
               value="activity"
               className="rounded-lg"
