@@ -310,15 +310,16 @@ export default function TaskDetailPage() {
     }
   };
 
-  const handleCapturePhoto = useCallback(() => {
-    if (capturedPhotos.length >= MAX_PHOTOS) {
+  const handleCapturePhoto = () => {
+    const total = (task?.proof_photos?.length || 0) + capturedPhotos.length;
+    if (total >= MAX_PHOTOS) {
       toast.error(`Maximum ${MAX_PHOTOS} photos allowed`);
       return;
     }
     const imageSrc = webcamRef.current?.getScreenshot();
     if (!imageSrc) return;
     setCapturedPhotos((prev) => [...prev, imageSrc]);
-  }, [webcamRef, capturedPhotos, MAX_PHOTOS]);
+  };
 
   const handleRemoveCaptured = (index) => {
     setCapturedPhotos((prev) => prev.filter((_, i) => i !== index));
@@ -335,9 +336,10 @@ export default function TaskDetailPage() {
         const file = new File([blob], `proof_${Date.now()}.jpg`, { type: "image/jpeg" });
         const formData = new FormData();
         formData.append("file", file);
-        await api.post(`/tasks/${taskId}/proof`, formData, {
+        const uploadRes = await api.post(`/tasks/${taskId}/proof`, formData, {
           headers: { "Content-Type": "multipart/form-data" },
         });
+        if (uploadRes.data?.task) setTask(uploadRes.data.task);
         successCount++;
       } catch {
         toast.error("Failed to upload a photo");
@@ -348,7 +350,6 @@ export default function TaskDetailPage() {
       toast.success(`${successCount} proof photo${successCount > 1 ? "s" : ""} uploaded`);
       setCapturedPhotos([]);
       setShowCamera(false);
-      fetchTaskData();
     }
   };
 
@@ -425,6 +426,9 @@ export default function TaskDetailPage() {
   const canUploadProof =
     task.status === "IN_PROGRESS" && task.assigned_to === user?.id;
   const hasProofPhotos = task.proof_photos && task.proof_photos.length > 0;
+  const existingPhotoCount = task.proof_photos?.length || 0;
+  const totalPhotoCount = existingPhotoCount + capturedPhotos.length;
+  const atPhotoLimit = totalPhotoCount >= MAX_PHOTOS;
 
   return (
     <Layout>
@@ -724,11 +728,12 @@ export default function TaskDetailPage() {
                 {canUploadProof && (
                   <button
                     onClick={() => setShowCamera(true)}
-                    className="inline-flex items-center gap-1 text-sm text-[#E23744] font-medium hover:text-[#C42B37]"
+                    disabled={atPhotoLimit}
+                    className="inline-flex items-center gap-1 text-sm font-medium text-[#E23744] hover:text-[#C42B37] disabled:opacity-40 disabled:cursor-not-allowed"
                     data-testid="open-camera-btn"
                   >
                     <Camera className="h-4 w-4" />
-                    Add Photos
+                    {atPhotoLimit ? "Max Photos Reached" : "Add Photos"}
                   </button>
                 )}
               </div>
@@ -760,7 +765,7 @@ export default function TaskDetailPage() {
           <div className="fixed inset-0 bg-black z-[300] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-4 py-3 bg-black/80">
               <span className="text-white font-semibold">
-                Proof Photos ({capturedPhotos.length}/{MAX_PHOTOS})
+                Proof Photos ({totalPhotoCount}/{MAX_PHOTOS})
               </span>
               <button
                 onClick={() => { setCapturedPhotos([]); setShowCamera(false); }}
@@ -799,7 +804,7 @@ export default function TaskDetailPage() {
               <div className="w-16" />
               <button
                 onClick={handleCapturePhoto}
-                disabled={capturedPhotos.length >= MAX_PHOTOS}
+                disabled={atPhotoLimit}
                 className="h-16 w-16 rounded-full border-4 border-white bg-white/20 hover:bg-white/30 disabled:opacity-40 flex items-center justify-center transition-all active:scale-95"
               >
                 <div className="h-12 w-12 rounded-full bg-white" />
