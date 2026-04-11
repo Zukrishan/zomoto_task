@@ -54,7 +54,16 @@ def to_sl_iso(dt):
 import subprocess
 
 ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+
+# Load environment-specific .env file.
+# Set ENV=production in your shell or system environment on the server.
+# Locally, ENV defaults to "development".
+_env = os.environ.get("ENV", "development")
+_env_file = ROOT_DIR / f".env.{_env}"
+if _env_file.exists():
+    load_dotenv(_env_file)
+else:
+    load_dotenv(ROOT_DIR / ".env")
 
 
 # MySQL Configuration
@@ -73,6 +82,58 @@ NOTIFY_LK_USER_ID = os.environ.get('NOTIFY_LK_USER_ID', '28528')
 NOTIFY_LK_API_KEY = os.environ.get('NOTIFY_LK_API_KEY', 'JeP7ACSaYTSwOY5eCl6S')
 NOTIFY_LK_SENDER_ID = os.environ.get('NOTIFY_LK_SENDER_ID', 'Zeeha HLD')
 
+# FCM Configuration
+FCM_SERVER_KEY = os.environ.get('FCM_SERVER_KEY')
+
+async def send_fcm_notification(token: str, title: str, body: str):
+    if not token:
+        return
+    try:
+        import google.auth.transport.requests
+        import google.oauth2.service_account
+        
+        SERVICE_ACCOUNT_FILE = ROOT_DIR / "firebase-service-account.json"
+        SCOPES = ["https://www.googleapis.com/auth/firebase.messaging"]
+        
+        credentials = google.oauth2.service_account.Credentials.from_service_account_file(
+            str(SERVICE_ACCOUNT_FILE), scopes=SCOPES
+        )
+        request = google.auth.transport.requests.Request()
+        credentials.refresh(request)
+        access_token = credentials.token
+        
+        # Get project ID from service account file
+        with open(SERVICE_ACCOUNT_FILE) as f:
+            sa_data = json.load(f)
+        project_id = sa_data["project_id"]
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"https://fcm.googleapis.com/v1/projects/{project_id}/messages:send",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "message": {
+                        "token": token,
+                        "notification": {
+                            "title": title,
+                            "body": body
+                        },
+                        "webpush": {
+                            "notification": {
+                                "icon": "/logo192.png",
+                                "click_action": "https://task.zomoto.lk"
+                            }
+                        }
+                    }
+                }
+            )
+            logger.info(f"FCM response: {response.status_code} {response.text}")
+    except Exception as e:
+        logger.error(f"FCM notification error: {e}")
+
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -87,10 +148,11 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# ===================== ENUMS =====================
+# ===================== ENUMS ====================
 class UserRole(str, enum.Enum):
     OWNER = "OWNER"
     MANAGER = "MANAGER"
+    SUPERVISOR = "SUPERVISOR"
     STAFF = "STAFF"
 
 class UserStatus(str, enum.Enum):
@@ -103,6 +165,7 @@ class TaskStatus(str, enum.Enum):
     COMPLETED = "COMPLETED"
     NOT_COMPLETED = "NOT_COMPLETED"
     VERIFIED = "VERIFIED"
+    REJECTED = "REJECTED"
 
 class TaskPriority(str, enum.Enum):
     HIGH = "HIGH"
@@ -179,9 +242,13 @@ class Task(Base):
     started_at = Column(DateTime)
     completed_at = Column(DateTime)
     verified_at = Column(DateTime)
-    verified_by = Column(String(36))
+    supervisor_verified_at    = Column(DateTime(timezone=True), nullable=True)
+    supervisor_verified_by    = Column(String, ForeignKey("users.id"), nullable=True)
+    verified_by               = Column(String, ForeignKey("users.id"), nullable=True)
     is_deleted = Column(Boolean, default=False, index=True)
     is_overdue = Column(Boolean, default=False)
+    is_notified = Column(Boolean, default=False)
+    rejection_reason = Column(Text, nullable=True)
     is_late = Column(Boolean, default=False)
     is_archived = Column(Boolean, default=False, index=True)
     archived_at = Column(DateTime)
@@ -209,6 +276,14 @@ class TaskActivityLog(Base):
     action = Column(String(100), nullable=False)
     details = Column(Text)
     created_at = Column(DateTime, default=now_sl)
+
+class FCMToken(Base):
+    __tablename__ = "fcm_tokens"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), ForeignKey("users.id"), index=True)
+    token = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=now_sl)
+    updated_at = Column(DateTime, default=now_sl, onupdate=now_sl)
 
 class Notification(Base):
     __tablename__ = "notifications"
@@ -555,7 +630,7 @@ def get_users(db: Session = Depends(get_db), current_user: User = Depends(requir
 
 @api_router.get("/users/staff", response_model=List[UserResponse])
 def get_staff(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    users = db.query(User).filter(User.role.in_(["STAFF", "MANAGER"]), User.status == "ACTIVE").all()
+    users = db.query(User).filter(User.role.in_(["STAFF", "MANAGER", "SUPERVISOR"]), User.status == "ACTIVE").all()
     return [UserResponse(id=u.id, name=u.name, email=u.email, phone=u.phone,
                          role=u.role, status=u.status, created_at=u.created_at) for u in users]
 
@@ -572,6 +647,12 @@ def create_user(user_data: UserCreate, db: Session = Depends(get_db),
     db.refresh(user)
     return UserResponse(id=user.id, name=user.name, email=user.email, phone=user.phone,
                         role=user.role, status=user.status, created_at=user.created_at)
+
+@api_router.get("/users/subtask-staff", response_model=List[UserResponse])
+def get_subtask_staff(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    users = db.query(User).filter(User.role.in_(["STAFF"]), User.status == "ACTIVE").all()
+    return [UserResponse(id=u.id, name=u.name, email=u.email, phone=u.phone,
+                         role=u.role, status=u.status, created_at=u.created_at) for u in users]
 
 @api_router.put("/users/{user_id}", response_model=UserResponse)
 def update_user(user_id: str, name: str = None, phone: str = None, role: str = None, status: str = None,
@@ -742,6 +823,7 @@ def _build_task_from_template(tmpl: TaskTemplate, today, now: datetime) -> Task:
         allocated_datetime=allocated_dt, deadline=deadline,
         assigned_to=tmpl.assigned_to, assigned_to_name=tmpl.assigned_to_name,
         created_by=tmpl.created_by, created_by_name="System", template_id=tmpl.id,
+	is_notified=False,
     )
 
 @api_router.post("/task-templates/generate-now")
@@ -799,19 +881,39 @@ def task_to_response(task: Task) -> dict:
         "created_by": task.created_by, "created_by_name": task.created_by_name,
         "started_at": fmt(task.started_at), "completed_at": fmt(task.completed_at),
         "verified_at": fmt(task.verified_at),
+        "supervisor_verified_at": fmt(task.supervisor_verified_at),
+        "supervisor_verified_by": task.supervisor_verified_by,
         "is_overdue": task.is_overdue, "is_late": task.is_late or False,
         "is_archived": task.is_archived or False,
         "archived_at": fmt(task.archived_at) if hasattr(task, 'archived_at') else None,
         "actual_time_taken": task.actual_time_taken, "template_id": task.template_id,
+        "parent_task_id": task.parent_task_id,
+        "rejection_reason": task.rejection_reason,
         "created_at": fmt(task.created_at), "updated_at": fmt(task.updated_at)
     }
 
 @api_router.get("/tasks")
 def get_tasks(status: str = None, category: str = None, priority: str = None, assigned_to: str = None,
+              limit: int = 20, offset: int = 0,
               db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     query = db.query(Task).filter(Task.is_deleted == False, Task.is_archived == False)
     if current_user.role == "STAFF":
         query = query.filter(Task.assigned_to == current_user.id)
+    elif current_user.role == "SUPERVISOR":
+        # Supervisor sees:
+        # 1. Tasks assigned to them (parent tasks from owner/manager)
+        # 2. Sub-tasks they created ONLY when action is needed (COMPLETED=needs verification, REJECTED=staff must redo)
+        from sqlalchemy import or_, and_
+        query = query.filter(
+            or_(
+                Task.assigned_to == current_user.id,
+                and_(
+                    Task.created_by == current_user.id,
+                    Task.parent_task_id != None,
+                    Task.status.in_(["COMPLETED", "REJECTED"])
+                )
+            )
+        )
     if status:
         query = query.filter(Task.status == status)
     if category:
@@ -825,7 +927,7 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
     now = now_sl()
     today = now.day
 
-    tasks = query.order_by(Task.created_at.desc()).all()
+    tasks = query.order_by(Task.created_at.asc()).all()
     result = []
     for task in tasks:
         # For recurring tasks: check today is in schedule and allocated time has passed
@@ -835,7 +937,9 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
             if task.allocated_datetime and task.allocated_datetime > now:
                 continue
         result.append(task_to_response(task))
-    return result
+    total = len(result)
+    paginated = result[offset:offset + limit]
+    return {"tasks": paginated, "total": total, "limit": limit, "offset": offset, "has_more": offset + limit < total}
 
 @api_router.post("/tasks")
 async def create_task(task_data: TaskCreate, db: Session = Depends(get_db),
@@ -872,9 +976,8 @@ async def create_task(task_data: TaskCreate, db: Session = Depends(get_db),
     create_activity_log(db, task.id, current_user.id, current_user.name, "CREATED", f"Task created: {task.title}")
 
     if task.assigned_to:
-        await create_notification(db, task.assigned_to, "TASK_ASSIGNED", "New Task Assigned",
-                                   f"You have been assigned: {task.title}", task.id)
-
+        await create_notification(db, task.assigned_to, "Task Starting Now",
+                                   f"{task.title}", task.id)
     await manager.broadcast_to_all({"type": "task_created", "data": task_to_response(task)})
     return task_to_response(task)
 
@@ -898,10 +1001,13 @@ def get_task(task_id: str, db: Session = Depends(get_db), current_user: User = D
 
 @api_router.put("/tasks/{task_id}")
 async def update_task(task_id: str, task_data: TaskUpdate, db: Session = Depends(get_db),
-                      current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+                      current_user: User = Depends(require_roles(["OWNER", "MANAGER", "SUPERVISOR"]))):
     task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
+    # Supervisor can only update tasks they created
+    if current_user.role == "SUPERVISOR" and task.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only update tasks you created")
 
     update_fields = task_data.dict(exclude_unset=True)
 
@@ -945,16 +1051,26 @@ async def start_task(task_id: str, db: Session = Depends(get_db), current_user: 
     db.commit()
     db.refresh(task)
     create_activity_log(db, task.id, current_user.id, current_user.name, "STARTED", "Task started")
+    # If this is a sub-task, update parent task status to IN_PROGRESS
+    if task.parent_task_id:
+        parent_task = db.query(Task).filter(Task.id == task.parent_task_id, Task.is_deleted == False).first()
+        if parent_task and parent_task.status == "PENDING":
+            parent_task.status = "IN_PROGRESS"
+            parent_task.started_at = now_sl()
+            db.commit()
+            await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(parent_task)})
+        if parent_task and parent_task.assigned_to:
+            await create_notification(db, parent_task.assigned_to, "TASK_UPDATED", "Sub-task Started",
+                                      f"Sub-task '{task.title}' has been started", task.id)
     await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
     return task_to_response(task)
-
 @api_router.post("/tasks/{task_id}/complete")
 async def complete_task(task_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    if task.status not in ("IN_PROGRESS", "NOT_COMPLETED"):
-        raise HTTPException(status_code=400, detail="Task can only be completed from IN_PROGRESS or NOT_COMPLETED status")
+    if task.status not in ("IN_PROGRESS", "NOT_COMPLETED", "REJECTED"):
+        raise HTTPException(status_code=400, detail="Task can only be completed from IN_PROGRESS, NOT_COMPLETED or REJECTED status")
     if not task.proof_photos or len(task.proof_photos) == 0:
         raise HTTPException(status_code=400, detail="Proof photo required before completing")
 
@@ -974,6 +1090,22 @@ async def complete_task(task_id: str, db: Session = Depends(get_db), current_use
 
     create_activity_log(db, task.id, current_user.id, current_user.name, "COMPLETED",
                         f"Task {'completed (late)' if is_late else 'completed'}")
+    # If this is a sub-task, update parent task status to IN_PROGRESS
+    if task.parent_task_id:
+        parent_task = db.query(Task).filter(Task.id == task.parent_task_id, Task.is_deleted == False).first()
+        if parent_task and parent_task.status == "PENDING":
+            parent_task.status = "IN_PROGRESS"
+            parent_task.started_at = now
+            db.commit()
+            await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(parent_task)})
+        # Notify supervisor
+        if parent_task and parent_task.assigned_to:
+            await create_notification(db, parent_task.assigned_to, "TASK_COMPLETED", "Sub-task Completed",
+                                      f"Sub-task '{task.title}' has been completed", task.id)
+            fcm_tokens = db.query(FCMToken).filter(FCMToken.user_id == parent_task.assigned_to).all()
+            for fcm_token in fcm_tokens:
+                await send_fcm_notification(fcm_token.token, "Sub-task Completed",
+                                            f"Sub-task '{task.title}' has been completed")
     managers = db.query(User).filter(User.role.in_(["OWNER", "MANAGER"]), User.status == "ACTIVE").all()
     late_msg = " (Late)" if is_late else ""
     for mgr in managers:
@@ -982,25 +1114,158 @@ async def complete_task(task_id: str, db: Session = Depends(get_db), current_use
     await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
     return task_to_response(task)
 
-@api_router.post("/tasks/{task_id}/verify")
-async def verify_task(task_id: str, db: Session = Depends(get_db),
-                      current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+
+@api_router.post("/tasks/{task_id}/subtasks")
+async def create_subtask(task_id: str, task_data: TaskCreate, db: Session = Depends(get_db),
+                         current_user: User = Depends(require_roles(["OWNER", "MANAGER", "SUPERVISOR"]))):
+    parent_task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
+    if not parent_task:
+        raise HTTPException(status_code=404, detail="Parent task not found")
+    if current_user.role == "SUPERVISOR" and parent_task.assigned_to != current_user.id:
+        raise HTTPException(status_code=403, detail="You can only create sub-tasks for your own tasks")
+    assigned_to_name = None
+    if task_data.assigned_to:
+        staff = db.query(User).filter(User.id == task_data.assigned_to).first()
+        if staff:
+            assigned_to_name = staff.name
+    task = Task(
+        title=task_data.title, description=task_data.description,
+        category=task_data.category, priority=task_data.priority or "MEDIUM",
+        status="PENDING", task_type="SUBTASK",
+        time_interval=task_data.time_interval, time_unit=task_data.time_unit or "MINUTES",
+        allocated_datetime=task_data.allocated_datetime,
+        assigned_to=task_data.assigned_to, assigned_to_name=assigned_to_name,
+        created_by=current_user.id, created_by_name=current_user.name,
+        parent_task_id=task_id, is_notified=False
+    )
+    db.add(task)
+    db.commit()
+    db.refresh(task)
+    if task_data.assigned_to:
+        await create_notification(db, task_data.assigned_to, "TASK_ASSIGNED", "New Sub-Task Assigned",
+                                  f"You have been assigned a sub-task: {task.title}", task.id)
+    await manager.broadcast_to_all({"type": "task_created", "data": task_to_response(task)})
+    return task_to_response(task)
+
+@api_router.get("/tasks/{task_id}/subtasks")
+def get_subtasks(task_id: str, db: Session = Depends(get_db),
+                 current_user: User = Depends(get_current_user)):
+    subtasks = db.query(Task).filter(
+        Task.parent_task_id == task_id,
+        Task.is_deleted == False
+    ).all()
+    return [task_to_response(t) for t in subtasks]
+
+@api_router.post("/tasks/{task_id}/reassign")
+async def reassign_subtask(task_id: str, staff_id: str, db: Session = Depends(get_db),
+                           current_user: User = Depends(require_roles(["OWNER", "MANAGER", "SUPERVISOR"]))):
     task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    if task.status != "COMPLETED":
-        raise HTTPException(status_code=400, detail="Only completed tasks can be verified")
-    task.status = "VERIFIED"
-    task.verified_at = now_sl()
-    task.verified_by = current_user.id
-    task.is_archived = True
-    task.archived_at = now_sl()
+    if current_user.role == "SUPERVISOR":
+        if not task.parent_task_id:
+            raise HTTPException(status_code=403, detail="Supervisors can only reassign sub-tasks")
+        if task.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only reassign sub-tasks you created")
+        if task.status == "VERIFIED":
+            raise HTTPException(status_code=400, detail="Cannot reassign a verified task")
+    new_staff = db.query(User).filter(User.id == staff_id, User.status == "ACTIVE").first()
+    if not new_staff:
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    old_assignee = task.assigned_to_name
+    # Reset task so new staff starts fresh
+    task.assigned_to = staff_id
+    task.assigned_to_name = new_staff.name
+    task.status = "PENDING"
+    task.proof_photos = []
+    task.rejection_reason = None
+    task.started_at = None
+    task.completed_at = None
+    task.supervisor_verified_at = None
+    task.supervisor_verified_by = None
     db.commit()
     db.refresh(task)
-    create_activity_log(db, task.id, current_user.id, current_user.name, "VERIFIED", "Task verified")
+    create_activity_log(db, task.id, current_user.id, current_user.name, "REASSIGNED",
+                        f"Reassigned from {old_assignee} to {new_staff.name}")
+    await create_notification(db, staff_id, "TASK_ASSIGNED", "Sub-Task Assigned",
+                              f"You have been assigned a sub-task: {task.title}", task.id)
+    await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
+    return task_to_response(task)
+
+@api_router.post("/tasks/{task_id}/verify")
+async def verify_task(task_id: str, db: Session = Depends(get_db),
+                      current_user: User = Depends(require_roles(["OWNER", "MANAGER", "SUPERVISOR"]))):
+    task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if current_user.role == "SUPERVISOR":
+        if task.parent_task_id is None:
+            raise HTTPException(status_code=403, detail="Supervisors can only verify sub-tasks")
+        if task.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only verify sub-tasks you created")
+        if task.status != "COMPLETED":
+            raise HTTPException(status_code=400, detail="Task must be COMPLETED before supervisor verification")
+        if task.supervisor_verified_at:
+            raise HTTPException(status_code=400, detail="Sub-task has already been supervisor-verified")
+        # Supervisor first-stage verify
+        task.status = "SUPERVISOR_VERIFIED"
+        task.supervisor_verified_at = now_sl()
+        task.supervisor_verified_by = current_user.id
+        db.commit()
+        create_activity_log(db, task.id, current_user.id, current_user.name, "SUPERVISOR_VERIFIED", "Sub-task verified by supervisor — awaiting manager/owner final verification")
+        # Notify owner/manager to do final verification
+        managers = db.query(User).filter(User.role.in_(["OWNER", "MANAGER"]), User.status == "ACTIVE").all()
+        for mgr in managers:
+            await create_notification(db, mgr.id, "TASK_COMPLETED", "Sub-task Ready for Final Verification",
+                                      f"Sub-task '{task.title}' has been supervisor-verified and is ready for your final approval", task.id)
+        if task.assigned_to:
+            await create_notification(db, task.assigned_to, "TASK_VERIFIED", "Sub-task Supervisor-Verified",
+                                      f"Your sub-task '{task.title}' was verified by supervisor and is pending manager approval", task.id)
+    else:
+        # Owner/Manager final verification — accept COMPLETED (regular tasks) or SUPERVISOR_VERIFIED (sub-tasks)
+        if task.status not in ("COMPLETED", "SUPERVISOR_VERIFIED"):
+            raise HTTPException(status_code=400, detail="Task must be COMPLETED or SUPERVISOR_VERIFIED to verify")
+        if task.parent_task_id and task.status == "COMPLETED":
+            raise HTTPException(status_code=400, detail="This sub-task must be supervisor-verified before final verification")
+        task.status = "VERIFIED"
+        task.verified_at = now_sl()
+        task.verified_by = current_user.id
+        db.commit()
+        create_activity_log(db, task.id, current_user.id, current_user.name, "VERIFIED", "Task fully verified")
+        if task.assigned_to:
+            await create_notification(db, task.assigned_to, "TASK_VERIFIED", "Task Verified",
+                                      f"Your task '{task.title}' has been fully verified!", task.id)
+    await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
+    return task_to_response(task)
+
+@api_router.post("/tasks/{task_id}/reject")
+async def reject_task(task_id: str, reason: str = "", db: Session = Depends(get_db),
+                      current_user: User = Depends(require_roles(["OWNER", "MANAGER", "SUPERVISOR"]))):
+    task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if current_user.role == "SUPERVISOR":
+        if not task.parent_task_id:
+            raise HTTPException(status_code=403, detail="Supervisors can only reject sub-tasks")
+        if task.created_by != current_user.id:
+            raise HTTPException(status_code=403, detail="You can only reject sub-tasks you created")
+        if task.status != "COMPLETED":
+            raise HTTPException(status_code=400, detail="Can only reject a COMPLETED sub-task")
+    task.status = "REJECTED"
+    task.proof_photos = []
+    task.rejection_reason = reason
+    db.commit()
+    create_activity_log(db, task.id, current_user.id, current_user.name, "REJECTED", f"Proof rejected: {reason}")
     if task.assigned_to:
-        await create_notification(db, task.assigned_to, "TASK_VERIFIED", "Task Verified",
-                                   f"Your task '{task.title}' has been verified", task.id)
+        await create_notification(db, task.assigned_to, "TASK_REJECTED", "Proof Rejected",
+                                  f"Your proof for '{task.title}' was rejected. {reason}", task.id)
+        fcm_tokens = db.query(FCMToken).filter(FCMToken.user_id == task.assigned_to).all()
+        for fcm_token in fcm_tokens:
+            await send_fcm_notification(
+                fcm_token.token,
+                "Proof Rejected",
+                f"Your proof for '{task.title}' was rejected. {reason}"
+            )
     await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
     return task_to_response(task)
 
@@ -1019,9 +1284,7 @@ async def upload_proof(task_id: str, file: UploadFile = File(...), db: Session =
         content = await file.read()
         await f.write(content)
     proof_url = f"/api/uploads/proofs/{filename}"
-    proof_photos = task.proof_photos or []
-    proof_photos.append(proof_url)
-    task.proof_photos = proof_photos
+    task.proof_photos = list(task.proof_photos or []) + [proof_url]
     db.commit()
     db.refresh(task)
     create_activity_log(db, task.id, current_user.id, current_user.name, "PROOF_UPLOADED", "Proof photo uploaded")
@@ -1043,6 +1306,7 @@ async def delete_task(task_id: str, db: Session = Depends(get_db),
 def get_task_reports(
     status: str = None, category: str = None, priority: str = None, assigned_to: str = None,
     date_from: str = None, date_to: str = None, include_archived: bool = True,
+    limit: int = 10, offset: int = 0,
     db: Session = Depends(get_db), current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))
 ):
     query = db.query(Task).filter(Task.is_deleted == False)
@@ -1070,8 +1334,11 @@ def get_task_reports(
             pass
     tasks = query.order_by(Task.created_at.desc()).all()
     total = len(tasks)
+    paginated = tasks[offset:offset + limit]
     return {
-        "tasks": [task_to_response(t) for t in tasks],
+        "tasks": [task_to_response(t) for t in paginated],
+        "total": total,
+        "has_more": offset + limit < total,
         "summary": {
             "total": total,
             "verified": sum(1 for t in tasks if t.status == "VERIFIED"),
@@ -1113,6 +1380,20 @@ def get_task_activity(task_id: str, db: Session = Depends(get_db), current_user:
     return [{"id": log.id, "task_id": log.task_id, "user_id": log.user_id, "user_name": log.user_name,
              "action": log.action, "details": log.details, "created_at": log.created_at.isoformat()} for log in logs]
 
+# ===================== FCM TOKEN =====================
+class FCMTokenRequest(BaseModel):
+    token: str
+
+@api_router.post("/fcm-token")
+def save_fcm_token(request: FCMTokenRequest, db: Session = Depends(get_db), 
+                   current_user: User = Depends(get_current_user)):
+   # Delete all existing tokens for this user
+    db.query(FCMToken).filter(FCMToken.user_id == current_user.id).delete()
+    # Save the new token
+    fcm_token = FCMToken(user_id=current_user.id, token=request.token)
+    db.add(fcm_token)
+    db.commit()
+    return {"message": "FCM token saved"}
 # ===================== NOTIFICATIONS =====================
 @api_router.get("/notifications", response_model=List[NotificationResponse])
 def get_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -1164,8 +1445,8 @@ def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depe
     completed = base_query.filter(Task.status == "COMPLETED").count()
     verified = base_query.filter(Task.status == "VERIFIED").count()
     tasks_to_assign = db.query(Task).filter(Task.is_deleted == False, Task.assigned_to == None).count()
-    tasks_to_verify = db.query(Task).filter(Task.is_deleted == False, Task.status == "COMPLETED").count()
-    staff_count = db.query(User).filter(User.role.in_(["STAFF", "MANAGER"]), User.status == "ACTIVE").count()
+    tasks_to_verify = db.query(Task).filter(Task.is_deleted == False, Task.status.in_(["COMPLETED", "SUPERVISOR_VERIFIED"])).count()
+    staff_count = db.query(User).filter(User.role.in_(["STAFF", "MANAGER", "SUPERVISOR"]), User.status == "ACTIVE").count()
     return DashboardStats(total_tasks=total_tasks, in_progress=in_progress, completed=completed,
                           verified=verified, tasks_to_assign=tasks_to_assign,
                           tasks_to_verify=tasks_to_verify, staff_count=staff_count)
@@ -1226,6 +1507,45 @@ def seed_data(db: Session = Depends(get_db)):
     return {"message": "Database seeded successfully"}
 
 # ===================== BACKGROUND TASKS =====================
+async def send_scheduled_notifications():
+    """Send push notifications when task allocated_datetime is reached."""
+    while True:
+        try:
+            db = SessionLocal()
+            now = now_sl()
+            # Find tasks that:
+            # 1. Are still PENDING
+            # 2. Have an allocated_datetime in the past (time has come)
+            # 3. Have not been notified yet (use started_at as proxy — if None, not started)
+            # We use a 2-minute window to avoid missing tasks
+            one_min_ago = now - timedelta(minutes=1)
+            tasks_due = db.query(Task).filter(
+                Task.is_deleted == False,
+                Task.status == "PENDING",
+                Task.allocated_datetime <= now,
+                Task.assigned_to != None,
+                Task.is_notified == False
+            ).all()
+
+            for task in tasks_due:
+                # Mark as notified FIRST before sending to prevent duplicates
+                task.is_notified = True
+                db.commit()
+                
+                fcm_tokens = db.query(FCMToken).filter(FCMToken.user_id == task.assigned_to).all()
+                for fcm_token in fcm_tokens:
+                    await send_fcm_notification(
+                        fcm_token.token,
+                        "Task Starting Now",
+                        f"Your task '{task.title}' is scheduled to start now"
+                    )
+                logger.info(f"Sent scheduled notification for task: {task.title}")
+            db.close()
+        except Exception as e:
+            logger.error(f"Error sending scheduled notifications: {e}")
+        await asyncio.sleep(60)
+
+
 async def check_overdue_tasks():
     """Check for overdue tasks. All datetimes are naive SL — same reference as DB."""
     while True:
@@ -1240,7 +1560,7 @@ async def check_overdue_tasks():
             ).all()
             for task in overdue_tasks:
                 task.is_overdue = True
-                task.status = "NOT_COMPLETED"
+                task.is_late = True
                 if task.assigned_to:
                     db.add(Notification(user_id=task.assigned_to, type="TASK_OVERDUE",
                                         title="Task Overdue",
@@ -1327,6 +1647,7 @@ async def startup_event():
     seed_default_data()
     asyncio.create_task(check_overdue_tasks())
     asyncio.create_task(generate_recurring_tasks())
+    asyncio.create_task(send_scheduled_notifications())
 
 def seed_default_data():
     db = SessionLocal()
@@ -1341,14 +1662,6 @@ def seed_default_data():
                 db.add(User(name=u["name"], email=u["email"], role=u["role"],
                             hashed_password=get_password_hash(u["password"])))
                 logger.info(f"Seeded user: {u['email']}")
-        default_categories = [
-            {"name": "Kitchen", "color": "#EF4444"}, {"name": "Cleaning", "color": "#3B82F6"},
-            {"name": "Maintenance", "color": "#F59E0B"}, {"name": "Other", "color": "#6B7280"},
-        ]
-        for c in default_categories:
-            if not db.query(Category).filter(Category.name == c["name"]).first():
-                db.add(Category(name=c["name"], color=c["color"]))
-                logger.info(f"Seeded category: {c['name']}")
         db.commit()
     except Exception as e:
         logger.error(f"Error seeding data: {e}")
@@ -1371,3 +1684,10 @@ app.add_middleware(
 @app.get("/")
 def health_check():
     return {"status": "healthy", "database": "MySQL", "version": "3.0.0"}
+
+if __name__ == "__main__":
+    import uvicorn
+    _host = os.environ.get("HOST", "0.0.0.0")
+    _port = int(os.environ.get("PORT", 8000))
+    _reload = os.environ.get("ENV", "development") == "development"
+    uvicorn.run("server:app", host=_host, port=_port, reload=_reload)

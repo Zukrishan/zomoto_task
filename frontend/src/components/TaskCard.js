@@ -13,6 +13,8 @@ import {
   Loader2,
   Eye,
   X,
+  XCircle,
+  Plus,
   Download,
   Maximize2,
   UserPlus,
@@ -22,6 +24,7 @@ import { Card, CardContent } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import api, { getErrorMessage } from "../lib/api";
+import Webcam from "react-webcam";
 
 const BACKEND_URL = (process.env.REACT_APP_BACKEND_URL || "").replace(
   /\/$/,
@@ -37,8 +40,10 @@ const STATUS_CONFIG = {
   PENDING: { label: "Pending", color: "bg-blue-100 text-blue-700" },
   IN_PROGRESS: { label: "In Progress", color: "bg-amber-100 text-amber-700" },
   COMPLETED: { label: "Completed", color: "bg-emerald-100 text-emerald-700" },
+  SUPERVISOR_VERIFIED: { label: "Supervisor Verified", color: "bg-teal-100 text-teal-700" },
   NOT_COMPLETED: { label: "Not Completed", color: "bg-red-100 text-red-700" },
   VERIFIED: { label: "Verified", color: "bg-purple-100 text-purple-700" },
+  REJECTED: { label: "Rejected", color: "bg-red-100 text-red-700" },
 };
 
 const PRIORITY_CONFIG = {
@@ -63,6 +68,10 @@ export default function TaskCard({
   const [showProofModal, setShowProofModal] = useState(false);
   const [enlargedPhoto, setEnlargedPhoto] = useState(null);
   const [showAssignDropdown, setShowAssignDropdown] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [capturedPhotos, setCapturedPhotos] = useState([]); // [{dataUrl, blob}]
+  const webcamRef = useRef(null);
+  const MAX_PHOTOS = 5;
   const [staffList, setStaffList] = useState([]);
   const [assignLoading, setAssignLoading] = useState(false);
   const assignRef = useRef(null);
@@ -84,20 +93,41 @@ export default function TaskCard({
   const isStaff = currentUser?.role === "STAFF";
   const isOwner = currentUser?.role === "OWNER";
   const isManager = currentUser?.role === "MANAGER";
+  const isSupervisor = currentUser?.role === "SUPERVISOR";
   const isAssignedToMe = task.assigned_to === currentUser?.id;
   const canSelect = isOwner || isManager;
 
   // Action visibility
   const canStart = task.status === "PENDING" && isAssignedToMe;
-  const canUploadProof = task.status === "IN_PROGRESS" && isAssignedToMe;
+  const canUploadProof = ["IN_PROGRESS", "REJECTED"].includes(task.status) && isAssignedToMe;
   const canComplete =
-    task.status === "IN_PROGRESS" &&
+    ["IN_PROGRESS", "REJECTED"].includes(task.status) &&
     isAssignedToMe &&
     task.proof_photos?.length > 0;
-  const canVerify = task.status === "COMPLETED" && (isOwner || isManager);
+  const canVerify =
+    ((isOwner || isManager) && ["COMPLETED", "SUPERVISOR_VERIFIED"].includes(task.status) &&
+      !(task.parent_task_id && task.status === "COMPLETED")) ||
+    (isSupervisor && task.parent_task_id && task.status === "COMPLETED" &&
+      !task.supervisor_verified_at && task.created_by === currentUser?.id);
+  const [showRejectModal, setShowRejectModal] = useState(false);
+  const [rejectReason, setRejectReason] = useState('');
+  const [rejecting, setRejecting] = useState(false);
   const hasProofPhotos = task.proof_photos && task.proof_photos.length > 0;
   const canAssign =
     (isOwner || isManager) && !task.assigned_to && task.status === "PENDING";
+  const canCreateSubTask = isSupervisor && task.assigned_to === currentUser?.id && !task.parent_task_id && task.status === "PENDING";
+  const showRejectionReason = task.rejection_reason && isStaff && task.assigned_to === currentUser?.id;
+  // Supervisor can reassign sub-tasks they created at any status except VERIFIED/SUPERVISOR_VERIFIED
+  const canReassign = isSupervisor && task.parent_task_id &&
+    task.created_by === currentUser?.id &&
+    !["VERIFIED", "SUPERVISOR_VERIFIED"].includes(task.status);
+  const [showSubTaskModal, setShowSubTaskModal] = useState(false);
+  const [subTaskData, setSubTaskData] = useState({ title: task.title, assigned_to: '' });
+  const [creatingSubTask, setCreatingSubTask] = useState(false);
+  const [showReassignModal, setShowReassignModal] = useState(false);
+  const [showRejectionReasonModal, setShowRejectionReasonModal] = useState(false);
+  const [reassignStaffList, setReassignStaffList] = useState([]);
+  const [reassigning, setReassigning] = useState(false);
 
   // Close assign dropdown on outside click
   useEffect(() => {
@@ -226,6 +256,83 @@ export default function TaskCard({
     }
   };
 
+  const handleRejectTask = async () => {
+    setRejecting(true);
+    try {
+      await api.post(`/tasks/${task.id}/reject?reason=${encodeURIComponent(rejectReason)}`);
+      setShowRejectModal(false);
+      setRejectReason('');
+      toast.success('Proof rejected');
+      setTimeout(() => { onTaskUpdate?.(); }, 500);
+    } catch (error) {
+      toast.error('Failed to reject proof');
+    } finally {
+      setRejecting(false);
+    }
+  };
+
+  const handleOpenSubTask = async (e) => {
+    e.stopPropagation();
+    if (staffList.length === 0) {
+      await handleOpenAssign(e);
+      setShowAssignDropdown(false);
+    }
+    setShowSubTaskModal(true);
+  };
+
+  const handleOpenReassign = async (e) => {
+    e.stopPropagation();
+    try {
+      const response = await api.get('/users/subtask-staff');
+      setReassignStaffList(response.data);
+    } catch (error) {
+      toast.error('Failed to load staff');
+    }
+    setShowReassignModal(true);
+  };
+
+  const handleReassignTask = async (staffId, staffName) => {
+    setReassigning(true);
+    try {
+      await api.post(`/tasks/${task.id}/reassign?staff_id=${staffId}`);
+      toast.success(`Sub-task reassigned to ${staffName}`);
+      setShowReassignModal(false);
+      onTaskUpdate?.();
+    } catch (error) {
+      toast.error('Failed to reassign task');
+    } finally {
+      setReassigning(false);
+    }
+  };
+
+  const handleCreateSubTask = async () => {
+    if (!subTaskData.title || !subTaskData.assigned_to) {
+      toast.error('Please fill all fields');
+      return;
+    }
+    setCreatingSubTask(true);
+    try {
+      await api.post(`/tasks/${task.id}/subtasks`, {
+        title: subTaskData.title,
+        assigned_to: subTaskData.assigned_to,
+        priority: task.priority,
+        category: task.category,
+        time_interval: task.time_interval,
+        time_unit: task.time_unit,
+        allocated_datetime: task.allocated_datetime,
+        deadline: task.deadline
+      });
+      toast.success('Sub-task created');
+      setShowSubTaskModal(false);
+      setSubTaskData({ title: '', assigned_to: '' });
+      onTaskUpdate?.();
+    } catch (error) {
+      toast.error('Failed to create sub-task');
+    } finally {
+      setCreatingSubTask(false);
+    }
+  };
+
   const handleVerifyTask = async (e) => {
     e.stopPropagation();
     setLoading(true);
@@ -240,25 +347,45 @@ export default function TaskCard({
     }
   };
 
-  const handleProofUpload = async (e) => {
-    e.stopPropagation();
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleCapturePhoto = useCallback(() => {
+    if (capturedPhotos.length >= MAX_PHOTOS) {
+      toast.error(`Maximum ${MAX_PHOTOS} photos allowed`);
+      return;
+    }
+    const imageSrc = webcamRef.current?.getScreenshot();
+    if (!imageSrc) return;
+    setCapturedPhotos((prev) => [...prev, imageSrc]);
+  }, [webcamRef, capturedPhotos, MAX_PHOTOS]);
 
+  const handleRemoveCaptured = (index) => {
+    setCapturedPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const handleUploadCaptured = async () => {
+    if (capturedPhotos.length === 0) return;
     setUploadingProof(true);
-    const formData = new FormData();
-    formData.append("file", file);
-
-    try {
-      await api.post(`/tasks/${task.id}/proof`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      toast.success("Proof photo uploaded!");
+    let successCount = 0;
+    for (const dataUrl of capturedPhotos) {
+      try {
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `proof_${Date.now()}.jpg`, { type: "image/jpeg" });
+        const formData = new FormData();
+        formData.append("file", file);
+        await api.post(`/tasks/${task.id}/proof`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        successCount++;
+      } catch {
+        toast.error("Failed to upload a photo");
+      }
+    }
+    setUploadingProof(false);
+    if (successCount > 0) {
+      toast.success(`${successCount} proof photo${successCount > 1 ? "s" : ""} uploaded!`);
+      setCapturedPhotos([]);
+      setShowCamera(false);
       onTaskUpdate?.();
-    } catch (error) {
-      toast.error("Failed to upload proof photo");
-    } finally {
-      setUploadingProof(false);
     }
   };
 
@@ -396,11 +523,25 @@ export default function TaskCard({
           canComplete ||
           canVerify ||
           hasProofPhotos ||
-          canAssign) && (
+          canAssign ||
+          canCreateSubTask ||
+          canReassign ||
+          showRejectionReason) && (
           <div
             className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-100 flex-wrap"
             onClick={(e) => e.stopPropagation()}
           >
+            {showRejectionReason && (
+              <Button
+                size="sm"
+                onClick={(e) => { e.stopPropagation(); setShowRejectionReasonModal(true); }}
+                className="bg-red-100 hover:bg-red-200 text-red-700 rounded-full h-8 px-4"
+              >
+                <XCircle className="h-3.5 w-3.5 mr-1" />
+                Rejection Reason
+              </Button>
+            )}
+
             {/* Assign to Staff Button */}
             {canAssign && (
               <div className="relative" ref={assignRef}>
@@ -474,37 +615,23 @@ export default function TaskCard({
 
             {/* Upload Proof Button (when IN_PROGRESS) */}
             {canUploadProof && (
-              <label
-                className="cursor-pointer"
-                onClick={(e) => e.stopPropagation()}
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(e) => { e.stopPropagation(); setShowCamera(true); }}
+                disabled={uploadingProof}
+                className={`rounded-full h-8 px-4 ${hasProofPhotos ? "border-emerald-500 text-emerald-600" : "border-amber-500 text-amber-600"}`}
+                data-testid={`upload-proof-${task.id}`}
               >
-                <Button
-                  size="sm"
-                  variant="outline"
-                  asChild
-                  disabled={uploadingProof}
-                  className={`rounded-full h-8 px-4 ${hasProofPhotos ? "border-emerald-500 text-emerald-600" : "border-amber-500 text-amber-600"}`}
-                  data-testid={`upload-proof-${task.id}`}
-                >
-                  <span>
-                    {uploadingProof ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
-                    ) : (
-                      <Camera className="h-3.5 w-3.5 mr-1" />
-                    )}
-                    {hasProofPhotos
-                      ? `${task.proof_photos.length} Photo${task.proof_photos.length > 1 ? "s" : ""}`
-                      : "Add Proof"}
-                  </span>
-                </Button>
-                <input
-                  type="file"
-                  className="hidden"
-                  onChange={handleProofUpload}
-                  accept="image/*"
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </label>
+                {uploadingProof ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-1" />
+                ) : (
+                  <Camera className="h-3.5 w-3.5 mr-1" />
+                )}
+                {hasProofPhotos
+                  ? `${task.proof_photos.length} Photo${task.proof_photos.length > 1 ? "s" : ""}`
+                  : "Add Proof"}
+              </Button>
             )}
 
             {/* View Proof Button - visible when there are proof photos */}
@@ -548,13 +675,35 @@ export default function TaskCard({
                 </span>
               )}
 
-            {/* Verify Task Button (Manager/Owner only) */}
+            {canReassign && (
+              <Button
+                size="sm"
+                onClick={handleOpenReassign}
+                className="bg-blue-500 hover:bg-blue-600 text-white rounded-full h-8 px-4"
+              >
+                <UserPlus className="h-3.5 w-3.5 mr-1" />
+                Reassign
+              </Button>
+            )}
+
+            {canCreateSubTask && (
+              <Button
+                size="sm"
+                onClick={handleOpenSubTask}
+                className="bg-orange-500 hover:bg-orange-600 text-white rounded-full h-8 px-4"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                Assign Sub-task
+              </Button>
+            )}
+
+            {/* Verify Task Button */}
             {canVerify && (
               <Button
                 size="sm"
                 onClick={handleVerifyTask}
                 disabled={loading}
-                className="bg-purple-500 hover:bg-purple-600 text-white rounded-full h-8 px-4"
+                className={`text-white rounded-full h-8 px-4 ${isSupervisor ? "bg-teal-500 hover:bg-teal-600" : "bg-purple-500 hover:bg-purple-600"}`}
                 data-testid={`verify-task-${task.id}`}
               >
                 {loading ? (
@@ -562,12 +711,170 @@ export default function TaskCard({
                 ) : (
                   <ShieldCheck className="h-3.5 w-3.5 mr-1" />
                 )}
-                Verify
+                {isSupervisor ? "S-Verify" : "Verify"}
+              </Button>
+            )}
+
+            {/* Reject button — supervisor for sub-tasks, owner/manager for any */}
+            {canVerify && (
+              <Button
+                size="sm"
+                onClick={() => setShowRejectModal(true)}
+                disabled={loading}
+                className="bg-red-500 hover:bg-red-600 text-white rounded-full h-8 px-4"
+              >
+                <XCircle className="h-3.5 w-3.5 mr-1" />
+                Reject
               </Button>
             )}
           </div>
         )}
       </CardContent>
+
+      {/* Rejection Reason Modal */}
+      {showRejectionReasonModal && (
+        <div
+          className="fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-red-500" />
+              <h3 className="text-lg font-semibold text-zinc-900">Proof Rejected</h3>
+            </div>
+            <p className="text-sm text-zinc-500">Your proof was rejected by the manager. Please re-upload a valid proof.</p>
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+              <p className="text-sm font-medium text-red-700 mb-1">Reason:</p>
+              <p className="text-sm text-red-600">{task.rejection_reason}</p>
+            </div>
+            <Button
+              className="w-full rounded-full bg-zinc-900 hover:bg-zinc-800 text-white"
+              onClick={(e) => { e.stopPropagation(); setShowRejectionReasonModal(false); }}
+            >
+              Got it
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Reassign Modal */}
+      {showReassignModal && (
+        <div
+          className="fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-zinc-900">Reassign Task</h3>
+            <p className="text-sm text-zinc-500">Select a staff member to reassign this task to.</p>
+            <div className="space-y-2 max-h-48 overflow-y-auto">
+              {reassignStaffList.map(s => (
+                <button
+                  key={s.id}
+                  onClick={(e) => { e.stopPropagation(); handleReassignTask(s.id, s.name); }}
+                  className="w-full text-left px-3 py-2 text-sm hover:bg-zinc-50 rounded-xl flex items-center gap-2 border border-zinc-100"
+                  disabled={reassigning}
+                >
+                  <User className="h-4 w-4 text-zinc-400" />
+                  <span>{s.name}</span>
+                  <Badge variant="outline" className="ml-auto text-[10px]">{s.role}</Badge>
+                </button>
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              className="w-full rounded-full"
+              onClick={(e) => { e.stopPropagation(); setShowReassignModal(false); }}
+            >
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Sub-task Modal */}
+      {showSubTaskModal && (
+        <div
+          className="fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-zinc-900">Create Sub-task</h3>
+            <p className="text-sm font-medium text-zinc-700">Task: {task.title}</p>
+            <select
+              className="w-full border border-zinc-200 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              value={subTaskData.assigned_to}
+              onChange={(e) => setSubTaskData({...subTaskData, assigned_to: e.target.value})}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <option value="">Select staff...</option>
+              {staffList.map(s => (
+                <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
+              ))}
+            </select>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-full"
+                onClick={(e) => { e.stopPropagation(); setShowSubTaskModal(false); setSubTaskData({ title: '', assigned_to: '' }); }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-orange-500 hover:bg-orange-600 text-white rounded-full"
+                onClick={(e) => { e.stopPropagation(); handleCreateSubTask(); }}
+                disabled={creatingSubTask}
+              >
+                {creatingSubTask ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Create
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Reject Proof Modal */}
+      {showRejectModal && (
+        <div className="fixed inset-0 bg-black/70 z-[200] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm space-y-4">
+            <h3 className="text-lg font-semibold text-zinc-900">Reject Proof</h3>
+            <p className="text-sm text-zinc-500">Provide a reason for rejecting this proof. The staff member will be notified.</p>
+            <textarea
+              className="w-full border border-zinc-200 rounded-xl p-3 text-sm resize-none h-24 focus:outline-none focus:ring-2 focus:ring-red-500"
+              placeholder="Enter reason..."
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            />
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                className="flex-1 rounded-full"
+                onClick={() => { setShowRejectModal(false); setRejectReason(''); }}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white rounded-full"
+                onClick={(e) => { e.stopPropagation(); handleRejectTask(); }}
+                disabled={rejecting}
+              >
+                {rejecting ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
+                Reject
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Proof Photos Modal */}
       {showProofModal && hasProofPhotos && (
@@ -675,6 +982,83 @@ export default function TaskCard({
             >
               <Download className="h-4 w-4 mr-2" />
               Download
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {showCamera && (
+        <div
+          className="fixed inset-0 bg-black z-[300] flex flex-col"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-black/80">
+            <span className="text-white font-semibold">
+              Proof Photos ({capturedPhotos.length}/{MAX_PHOTOS})
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => { e.stopPropagation(); setCapturedPhotos([]); setShowCamera(false); }}
+              className="text-white hover:bg-white/20 rounded-full h-8 w-8"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+
+          {/* Camera viewfinder */}
+          <div className="flex-1 relative overflow-hidden">
+            <Webcam
+              ref={webcamRef}
+              screenshotFormat="image/jpeg"
+              videoConstraints={{ facingMode: "environment" }}
+              className="w-full h-full object-cover"
+            />
+          </div>
+
+          {/* Captured thumbnails */}
+          {capturedPhotos.length > 0 && (
+            <div className="flex gap-2 px-4 py-2 bg-black/80 overflow-x-auto">
+              {capturedPhotos.map((src, i) => (
+                <div key={i} className="relative flex-shrink-0">
+                  <img src={src} alt={`proof ${i + 1}`} className="h-16 w-16 object-cover rounded-lg" />
+                  <button
+                    onClick={() => handleRemoveCaptured(i)}
+                    className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center text-xs"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Bottom controls */}
+          <div className="flex items-center justify-between px-6 py-4 bg-black/80">
+            {/* Spacer */}
+            <div className="w-16" />
+
+            {/* Capture button */}
+            <button
+              onClick={handleCapturePhoto}
+              disabled={capturedPhotos.length >= MAX_PHOTOS}
+              className="h-16 w-16 rounded-full border-4 border-white bg-white/20 hover:bg-white/30 disabled:opacity-40 flex items-center justify-center transition-all active:scale-95"
+            >
+              <div className="h-12 w-12 rounded-full bg-white" />
+            </button>
+
+            {/* Upload button */}
+            <Button
+              onClick={handleUploadCaptured}
+              disabled={capturedPhotos.length === 0 || uploadingProof}
+              className="bg-[#E23744] hover:bg-[#C42B37] text-white rounded-full h-10 px-4 text-sm w-16"
+            >
+              {uploadingProof ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                "Upload"
+              )}
             </Button>
           </div>
         </div>

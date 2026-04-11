@@ -36,6 +36,7 @@ const STATUS_OPTIONS = [
   { value: "PENDING", label: "Pending" },
   { value: "IN_PROGRESS", label: "In Progress" },
   { value: "COMPLETED", label: "Completed" },
+  { value: "SUPERVISOR_VERIFIED", label: "Supervisor Verified" },
   { value: "NOT_COMPLETED", label: "Not Completed" },
   { value: "VERIFIED", label: "Verified" },
 ];
@@ -64,6 +65,9 @@ export default function TasksPage() {
   const [deleting, setDeleting] = useState(false);
 
   const [categories, setCategories] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalTasks, setTotalTasks] = useState(0);
+  const PAGE_SIZE = 6;
 
   const [filters, setFilters] = useState({
     status: searchParams.get("status") || "ALL",
@@ -81,14 +85,17 @@ export default function TasksPage() {
       if (filters.priority !== "ALL")
         params.append("priority", filters.priority);
 
+      params.append("limit", PAGE_SIZE);
+      params.append("offset", (currentPage - 1) * PAGE_SIZE);
       const response = await api.get(`/tasks?${params.toString()}`);
-      setTasks(response.data);
+      setTasks(response.data.tasks);
+      setTotalTasks(response.data.total);
     } catch (error) {
       console.error("Failed to fetch tasks:", error);
     } finally {
       setLoading(false);
     }
-  }, [filters.status, filters.category, filters.priority]);
+  },[filters.status, filters.category, filters.priority, currentPage]);
 
   // Silent fetch (no loading state) for polling - updates both new tasks AND status changes
   const silentFetchTasks = useCallback(async () => {
@@ -100,16 +107,17 @@ export default function TasksPage() {
       if (filters.priority !== "ALL")
         params.append("priority", filters.priority);
 
+      params.append("limit", PAGE_SIZE);
+      params.append("offset", (currentPage - 1) * PAGE_SIZE);
       const response = await api.get(`/tasks?${params.toString()}`);
-
+      const newTasks = response.data.tasks;
+      setTotalTasks(response.data.total);
       // Check if there are any changes (new tasks OR status changes)
       const currentTasksMap = new Map(tasks.map((t) => [t.id, t]));
-      const newTasksMap = new Map(response.data.map((t) => [t.id, t]));
-
+      const newTasksMap = new Map(newTasks.map((t) => [t.id, t]));
       let hasChanges = false;
-
       // Check for new tasks
-      for (const task of response.data) {
+      for (const task of newTasks) {
         if (!currentTasksMap.has(task.id)) {
           hasChanges = true;
           if (task.task_type === "RECURRING") {
@@ -138,12 +146,16 @@ export default function TasksPage() {
       }
 
       if (hasChanges) {
-        setTasks(response.data);
+       setTasks(newTasks);
       }
     } catch (error) {
       console.error("Silent fetch failed:", error);
     }
   }, [filters.status, filters.category, filters.priority, tasks]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters.status, filters.category, filters.priority]);
 
   // Fetch tasks on filter change
   useEffect(() => {
@@ -198,9 +210,17 @@ export default function TasksPage() {
         (filters.category === "ALL" || newTask.category === filters.category) &&
         (filters.priority === "ALL" || newTask.priority === filters.priority);
 
-      // For staff, also check if assigned to them
+      // Staff only sees tasks assigned to them
       if (user?.role === "STAFF" && newTask.assigned_to !== user.id) {
         return;
+      }
+      // Supervisor sees tasks assigned to them OR sub-tasks they created that need action
+      if (user?.role === "SUPERVISOR") {
+        const isAssignedToMe = newTask.assigned_to === user.id;
+        const isMySubtaskNeedingAction = newTask.created_by === user.id &&
+          newTask.parent_task_id &&
+          ["COMPLETED", "REJECTED"].includes(newTask.status);
+        if (!isAssignedToMe && !isMySubtaskNeedingAction) return;
       }
 
       if (matchesFilters) {
@@ -229,8 +249,14 @@ export default function TasksPage() {
           (filters.priority === "ALL" ||
             updatedTask.priority === filters.priority);
 
-        if (!matchesFilters) {
-          // Remove from list if doesn't match anymore
+        // Supervisor: remove sub-tasks from list once they no longer need action
+        const supervisorShouldHide = user?.role === "SUPERVISOR" &&
+          updatedTask.parent_task_id &&
+          updatedTask.created_by === user.id &&
+          updatedTask.assigned_to !== user.id &&
+          !["COMPLETED", "REJECTED"].includes(updatedTask.status);
+
+        if (!matchesFilters || supervisorShouldHide) {
           return prev.filter((t) => t.id !== updatedTask.id);
         }
 
@@ -311,7 +337,7 @@ export default function TasksPage() {
   useWebSocketEvent("tasks_deleted", handleTasksDeleted);
   useWebSocketEvent("recurring_task_activated", handleRecurringTaskActivated);
 
-  const filteredTasks = tasks.filter(
+  const filteredTasks = (tasks || []).filter(
     (task) =>
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.description?.toLowerCase().includes(searchQuery.toLowerCase()),
@@ -653,6 +679,30 @@ export default function TasksPage() {
             </CardContent>
           </Card>
         )}
+	
+	{/* Pagination */}
+        {totalTasks > PAGE_SIZE && (
+          <div className="flex items-center justify-center gap-2 py-4">
+            <button
+              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 rounded-full border border-zinc-200 text-sm disabled:opacity-40 hover:bg-zinc-50"
+            >
+              Previous
+            </button>
+            <span className="text-sm text-zinc-500">
+              Page {currentPage} of {Math.ceil(totalTasks / PAGE_SIZE)}
+            </span>
+            <button
+              onClick={() => setCurrentPage(p => p + 1)}
+              disabled={currentPage >= Math.ceil(totalTasks / PAGE_SIZE)}
+              className="px-4 py-2 rounded-full border border-zinc-200 text-sm disabled:opacity-40 hover:bg-zinc-50"
+            >
+              Next
+            </button>
+          </div>
+        )}
+
       </div>
 
       <CreateTaskModal

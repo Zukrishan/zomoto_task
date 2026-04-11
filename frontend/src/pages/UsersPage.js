@@ -87,7 +87,7 @@ export default function UsersPage() {
   const handleToggleStatus = async (userId, currentStatus) => {
     const newStatus = currentStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
     try {
-      await api.put(`/users/${userId}`, { status: newStatus });
+      await api.put(`/users/${userId}?status=${newStatus}`);
       toast.success(`User ${newStatus.toLowerCase()}`);
       fetchUsers();
     } catch (error) {
@@ -111,6 +111,7 @@ export default function UsersPage() {
 
   const ROLE_COLORS = {
     MANAGER: 'bg-blue-100 text-blue-700',
+    SUPERVISOR: 'bg-orange-100 text-orange-700',
     STAFF: 'bg-green-100 text-green-700',
   };
 
@@ -212,7 +213,7 @@ export default function UsersPage() {
                     </div>
                   </div>
                   <div className="mt-3 pt-3 border-t border-zinc-100 flex gap-4 text-sm text-zinc-500">
-                    <span>📱 {user.phone}</span>
+                    <span> {user.phone}</span>
                     {user.employee_id && <span>ID: {user.employee_id}</span>}
                   </div>
                 </CardContent>
@@ -281,6 +282,7 @@ export default function UsersPage() {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="MANAGER">Manager</SelectItem>
+                  <SelectItem value="SUPERVISOR">Supervisor</SelectItem>
                   <SelectItem value="STAFF">Staff</SelectItem>
                 </SelectContent>
               </Select>

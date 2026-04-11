@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
@@ -22,7 +22,7 @@ import {
   AlertCircle,
   Camera,
   Repeat,
-  Wifi,
+  X,
 } from "lucide-react";
 import { format, formatDistanceToNow } from "date-fns";
 import { useAuth } from "../context/AuthContext";
@@ -59,11 +59,13 @@ import {
 } from "../components/ui/dropdown-menu";
 import EditTaskModal from "../components/EditTaskModal";
 import ImageViewer from "../components/ImageViewer";
+import Webcam from "react-webcam";
 
 const STATUS_CONFIG = {
   PENDING: { label: "Pending", color: "bg-blue-100 text-blue-700" },
   IN_PROGRESS: { label: "In Progress", color: "bg-amber-100 text-amber-700" },
   COMPLETED: { label: "Completed", color: "bg-emerald-100 text-emerald-700" },
+  SUPERVISOR_VERIFIED: { label: "Supervisor Verified", color: "bg-teal-100 text-teal-700" },
   NOT_COMPLETED: { label: "Not Completed", color: "bg-red-100 text-red-700" },
   VERIFIED: { label: "Verified", color: "bg-purple-100 text-purple-700" },
 };
@@ -97,6 +99,7 @@ export default function TaskDetailPage() {
   const { taskId } = useParams();
   const navigate = useNavigate();
   const { user, isOwner, isManager, isStaff } = useAuth();
+  const isSupervisor = user?.role === "SUPERVISOR";
   const { isConnected } = useWebSocket();
   const [task, setTask] = useState(null);
   const [comments, setComments] = useState([]);
@@ -109,6 +112,10 @@ export default function TaskDetailPage() {
   const [viewerImage, setViewerImage] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [updating, setUpdating] = useState(false);
+  const [showCamera, setShowCamera] = useState(false);
+  const [capturedPhotos, setCapturedPhotos] = useState([]);
+  const webcamRef = useRef(null);
+  const MAX_PHOTOS = 5;
 
   const fetchTaskData = useCallback(async () => {
     try {
@@ -122,9 +129,12 @@ export default function TaskDetailPage() {
       setActivityLog(activityRes.data);
       // Attachments are stored in the task object itself
       setAttachments(taskRes.data.attachments || []);
-    } catch (error) {
-      toast.error(getErrorMessage(error, "Failed to load task"));
-      navigate("/tasks");
+    }catch (error) {
+      // Only show error and navigate if it's the initial load
+      if (!task) {
+        toast.error(getErrorMessage(error, "Failed to load task"));
+        navigate("/tasks");
+      }
     } finally {
       setLoading(false);
     }
@@ -270,7 +280,11 @@ export default function TaskDetailPage() {
   const handleReassign = async (staffId) => {
     setUpdating(true);
     try {
-      await api.put(`/tasks/${taskId}`, { assigned_to: staffId });
+      if (isSupervisor) {
+        await api.post(`/tasks/${taskId}/reassign?staff_id=${staffId}`);
+      } else {
+        await api.put(`/tasks/${taskId}`, { assigned_to: staffId });
+      }
       toast.success("Task reassigned");
       fetchTaskData();
     } catch (error) {
@@ -296,21 +310,45 @@ export default function TaskDetailPage() {
     }
   };
 
-  const handleProofUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleCapturePhoto = useCallback(() => {
+    if (capturedPhotos.length >= MAX_PHOTOS) {
+      toast.error(`Maximum ${MAX_PHOTOS} photos allowed`);
+      return;
+    }
+    const imageSrc = webcamRef.current?.getScreenshot();
+    if (!imageSrc) return;
+    setCapturedPhotos((prev) => [...prev, imageSrc]);
+  }, [webcamRef, capturedPhotos, MAX_PHOTOS]);
 
-    const formData = new FormData();
-    formData.append("file", file);
+  const handleRemoveCaptured = (index) => {
+    setCapturedPhotos((prev) => prev.filter((_, i) => i !== index));
+  };
 
-    try {
-      await api.post(`/tasks/${taskId}/proof`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-      toast.success("Proof photo uploaded");
+  const handleUploadCaptured = async () => {
+    if (capturedPhotos.length === 0) return;
+    setUpdating(true);
+    let successCount = 0;
+    for (const dataUrl of capturedPhotos) {
+      try {
+        const res = await fetch(dataUrl);
+        const blob = await res.blob();
+        const file = new File([blob], `proof_${Date.now()}.jpg`, { type: "image/jpeg" });
+        const formData = new FormData();
+        formData.append("file", file);
+        await api.post(`/tasks/${taskId}/proof`, formData, {
+          headers: { "Content-Type": "multipart/form-data" },
+        });
+        successCount++;
+      } catch {
+        toast.error("Failed to upload a photo");
+      }
+    }
+    setUpdating(false);
+    if (successCount > 0) {
+      toast.success(`${successCount} proof photo${successCount > 1 ? "s" : ""} uploaded`);
+      setCapturedPhotos([]);
+      setShowCamera(false);
       fetchTaskData();
-    } catch (error) {
-      toast.error("Failed to upload proof photo");
     }
   };
 
@@ -371,10 +409,15 @@ export default function TaskDetailPage() {
     (isStaff || isOwner || isManager) &&
     task.status === "IN_PROGRESS" &&
     task.assigned_to === user?.id;
-  const canVerify = (isOwner || isManager) && task.status === "COMPLETED";
+  const canVerify =
+    ((isOwner || isManager) && ["COMPLETED", "SUPERVISOR_VERIFIED"].includes(task.status) &&
+      !(task.parent_task_id && task.status === "COMPLETED")) ||
+    (isSupervisor && task.parent_task_id && task.status === "COMPLETED" &&
+      !task.supervisor_verified_at && task.created_by === user?.id);
   const canReassign =
-    (isOwner || isManager) &&
-    !["VERIFIED", "NOT_COMPLETED"].includes(task.status);
+    ((isOwner || isManager) && !["VERIFIED", "NOT_COMPLETED"].includes(task.status)) ||
+    (isSupervisor && task.parent_task_id && task.created_by === user?.id &&
+      !["VERIFIED", "SUPERVISOR_VERIFIED"].includes(task.status));
   const canEdit =
     (isOwner || isManager) &&
     !["VERIFIED", "NOT_COMPLETED"].includes(task.status);
@@ -524,7 +567,7 @@ export default function TaskDetailPage() {
             <Button
               onClick={handleVerify}
               disabled={updating}
-              className="bg-purple-500 hover:bg-purple-600 text-white rounded-full"
+              className={`text-white rounded-full ${isSupervisor ? "bg-teal-500 hover:bg-teal-600" : "bg-purple-500 hover:bg-purple-600"}`}
               data-testid="verify-task-btn"
             >
               {updating ? (
@@ -532,7 +575,7 @@ export default function TaskDetailPage() {
               ) : (
                 <ShieldCheck className="h-4 w-4 mr-2" />
               )}
-              Verify Task
+              {isSupervisor ? "Supervisor Verify" : "Final Verify"}
             </Button>
           )}
         </div>
@@ -670,45 +713,27 @@ export default function TaskDetailPage() {
           </CardContent>
         </Card>
 
-        {/* Proof Photos Section - Required for completion */}
+        {/* Proof Photos Section */}
         {(canUploadProof || hasProofPhotos) && (
           <Card className="bg-white rounded-2xl border border-zinc-100 shadow-sm">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Camera className="h-5 w-5 text-[#E23744]" />
-                Proof Photos
-                {canCompleteTask && !hasProofPhotos && (
-                  <Badge
-                    variant="outline"
-                    className="text-amber-600 border-amber-300"
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-medium text-zinc-900 text-sm">
+                  Proof Photos {hasProofPhotos && `(${task.proof_photos.length})`}
+                </span>
+                {canUploadProof && (
+                  <button
+                    onClick={() => setShowCamera(true)}
+                    className="inline-flex items-center gap-1 text-sm text-[#E23744] font-medium hover:text-[#C42B37]"
+                    data-testid="open-camera-btn"
                   >
-                    Required
-                  </Badge>
+                    <Camera className="h-4 w-4" />
+                    Add Photos
+                  </button>
                 )}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="pt-0">
-              {/* Proof photo upload */}
-              {canUploadProof && (
-                <label className="cursor-pointer mb-4 block">
-                  <div className="flex items-center justify-center gap-2 p-4 border-2 border-dashed border-amber-300 rounded-xl hover:border-[#E23744] bg-amber-50 transition-colors">
-                    <Camera className="h-5 w-5 text-amber-500" />
-                    <span className="text-amber-700 font-medium">
-                      Upload Proof Photo
-                    </span>
-                  </div>
-                  <input
-                    type="file"
-                    className="hidden"
-                    onChange={handleProofUpload}
-                    accept="image/*"
-                    data-testid="proof-upload-input"
-                  />
-                </label>
-              )}
+              </div>
 
-              {/* Display proof photos */}
-              {hasProofPhotos && (
+              {hasProofPhotos ? (
                 <div className="grid grid-cols-2 gap-2">
                   {task.proof_photos.map((photoUrl, index) => (
                     <ProofPhotoItem
@@ -721,15 +746,73 @@ export default function TaskDetailPage() {
                     />
                   ))}
                 </div>
-              )}
-
-              {!hasProofPhotos && !canUploadProof && (
-                <p className="text-zinc-400 text-center py-4">
-                  No proof photos uploaded yet
+              ) : (
+                <p className="text-zinc-400 text-center py-4 text-sm">
+                  No proof photos yet
                 </p>
               )}
             </CardContent>
           </Card>
+        )}
+
+        {/* Camera Modal */}
+        {showCamera && (
+          <div className="fixed inset-0 bg-black z-[300] flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 bg-black/80">
+              <span className="text-white font-semibold">
+                Proof Photos ({capturedPhotos.length}/{MAX_PHOTOS})
+              </span>
+              <button
+                onClick={() => { setCapturedPhotos([]); setShowCamera(false); }}
+                className="text-white hover:bg-white/20 rounded-full h-8 w-8 flex items-center justify-center"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 relative overflow-hidden">
+              <Webcam
+                ref={webcamRef}
+                screenshotFormat="image/jpeg"
+                videoConstraints={{ facingMode: "environment" }}
+                className="w-full h-full object-cover"
+              />
+            </div>
+
+            {capturedPhotos.length > 0 && (
+              <div className="flex gap-2 px-4 py-2 bg-black/80 overflow-x-auto">
+                {capturedPhotos.map((src, i) => (
+                  <div key={i} className="relative flex-shrink-0">
+                    <img src={src} alt={`proof ${i + 1}`} className="h-16 w-16 object-cover rounded-lg" />
+                    <button
+                      onClick={() => handleRemoveCaptured(i)}
+                      className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full h-5 w-5 flex items-center justify-center"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center justify-between px-6 py-4 bg-black/80">
+              <div className="w-16" />
+              <button
+                onClick={handleCapturePhoto}
+                disabled={capturedPhotos.length >= MAX_PHOTOS}
+                className="h-16 w-16 rounded-full border-4 border-white bg-white/20 hover:bg-white/30 disabled:opacity-40 flex items-center justify-center transition-all active:scale-95"
+              >
+                <div className="h-12 w-12 rounded-full bg-white" />
+              </button>
+              <Button
+                onClick={handleUploadCaptured}
+                disabled={capturedPhotos.length === 0 || updating}
+                className="bg-[#E23744] hover:bg-[#C42B37] text-white rounded-full h-10 px-4 text-sm w-16"
+              >
+                {updating ? <Loader2 className="h-4 w-4 animate-spin" /> : "Upload"}
+              </Button>
+            </div>
+          </div>
         )}
 
         {/* Tabs for Comments, Attachments, Activity */}
@@ -743,14 +826,7 @@ export default function TaskDetailPage() {
               <MessageSquare className="h-4 w-4 mr-2" />
               Comments
             </TabsTrigger>
-            <TabsTrigger
-              value="attachments"
-              className="rounded-lg"
-              data-testid="attachments-tab"
-            >
-              <Paperclip className="h-4 w-4 mr-2" />
-              Files
-            </TabsTrigger>
+         
             <TabsTrigger
               value="activity"
               className="rounded-lg"
