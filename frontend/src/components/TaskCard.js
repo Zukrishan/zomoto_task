@@ -97,30 +97,59 @@ export default function TaskCard({
   const isAssignedToMe = task.assigned_to === currentUser?.id;
   const canSelect = isOwner || isManager;
 
+  // Embedded sub-task data (for supervisor and manager parent task cards)
+  const activeSubtask = task.active_subtask || null;
+  // Supervisor verifies COMPLETED sub-task from parent card
+  const hasCompletedSubtask = isSupervisor && !task.parent_task_id && activeSubtask?.status === "COMPLETED";
+  // Supervisor sees rejected sub-task on parent card
+  const hasRejectedSubtask = (isSupervisor || isManager || isOwner) && !task.parent_task_id && activeSubtask?.status === "REJECTED";
+  // Manager/Owner does final verify on SUPERVISOR_VERIFIED sub-task from parent card
+  const hasSVSubtask = (isManager || isOwner) && !task.parent_task_id && activeSubtask?.status === "SUPERVISOR_VERIFIED";
+  // Route actions to sub-task ID when acting from a parent card
+  const actionTaskId = (hasCompletedSubtask || hasSVSubtask) ? activeSubtask.id : task.id;
+  // Proof photos: show sub-task's photos when supervisor is acting on parent card
+  const displayProofPhotos = (hasCompletedSubtask || hasRejectedSubtask || hasSVSubtask)
+    ? (activeSubtask?.proof_photos || [])
+    : (task.proof_photos || []);
+
   // Action visibility
-  const canStart = task.status === "PENDING" && isAssignedToMe;
-  const canUploadProof = ["IN_PROGRESS", "REJECTED"].includes(task.status) && isAssignedToMe;
+  // Supervisor cannot start a parent task if they've already delegated it via sub-task
+  const canStart = task.status === "PENDING" && isAssignedToMe && !task.has_active_subtask;
+  // Supervisor cannot upload proof on parent task when sub-task has been delegated to staff
+  const canUploadProof = ["IN_PROGRESS", "REJECTED"].includes(task.status) && isAssignedToMe && !task.has_active_subtask;
   const canComplete =
     ["IN_PROGRESS", "REJECTED"].includes(task.status) &&
     isAssignedToMe &&
-    task.proof_photos?.length > 0;
+    task.proof_photos?.length > 0 &&
+    !task.has_active_subtask;
   const canVerify =
     ((isOwner || isManager) && ["COMPLETED", "SUPERVISOR_VERIFIED"].includes(task.status) &&
       !(task.parent_task_id && task.status === "COMPLETED")) ||
+    hasSVSubtask ||        // Manager verifies SUPERVISOR_VERIFIED sub-task from parent card
     (isSupervisor && task.parent_task_id && task.status === "COMPLETED" &&
-      !task.supervisor_verified_at && task.created_by === currentUser?.id);
+      !task.supervisor_verified_at && task.created_by === currentUser?.id) ||
+    hasCompletedSubtask;   // Supervisor verifies COMPLETED sub-task from parent card
   const [showRejectModal, setShowRejectModal] = useState(false);
   const [rejectReason, setRejectReason] = useState('');
   const [rejecting, setRejecting] = useState(false);
-  const hasProofPhotos = task.proof_photos && task.proof_photos.length > 0;
+  const hasProofPhotos = displayProofPhotos.length > 0;
   const canAssign =
     (isOwner || isManager) && !task.assigned_to && task.status === "PENDING";
-  const canCreateSubTask = isSupervisor && task.assigned_to === currentUser?.id && !task.parent_task_id && task.status === "PENDING";
-  const showRejectionReason = task.rejection_reason && isStaff && task.assigned_to === currentUser?.id;
+  // Supervisor can create sub-task only when no sub-task has been delegated yet
+  const canCreateSubTask = isSupervisor && task.assigned_to === currentUser?.id && !task.parent_task_id && task.status === "PENDING" && !task.has_active_subtask;
+  const showRejectionReason = (
+    (task.rejection_reason && isStaff && task.assigned_to === currentUser?.id) ||
+    (activeSubtask?.rejection_reason && isSupervisor && !task.parent_task_id && hasRejectedSubtask)
+  );
+  const displayRejectionReason = activeSubtask?.rejection_reason || task.rejection_reason;
   // Supervisor can reassign sub-tasks they created at any status except VERIFIED/SUPERVISOR_VERIFIED
   const canReassign = isSupervisor && task.parent_task_id &&
     task.created_by === currentUser?.id &&
     !["VERIFIED", "SUPERVISOR_VERIFIED"].includes(task.status);
+  // Supervisor parent task: show Re-assign button when sub-task has been delegated to staff
+  const canReassignSubtask = isSupervisor && !task.parent_task_id &&
+    task.assigned_to === currentUser?.id && task.active_subtask &&
+    !["VERIFIED", "SUPERVISOR_VERIFIED"].includes(task.active_subtask.status);
   const [showSubTaskModal, setShowSubTaskModal] = useState(false);
   const [subTaskData, setSubTaskData] = useState({ title: task.title, assigned_to: '' });
   const [creatingSubTask, setCreatingSubTask] = useState(false);
@@ -128,6 +157,7 @@ export default function TaskCard({
   const [showRejectionReasonModal, setShowRejectionReasonModal] = useState(false);
   const [reassignStaffList, setReassignStaffList] = useState([]);
   const [reassigning, setReassigning] = useState(false);
+  const [activeSubtaskId, setActiveSubtaskId] = useState(null);
 
   // Close assign dropdown on outside click
   useEffect(() => {
@@ -173,7 +203,7 @@ export default function TaskCard({
 
   // Long press handlers for touch devices
   const handleTouchStart = useCallback(
-    (e) => {
+    (_e) => {
       if (!canSelect || selectMode) return;
       isLongPress.current = false;
       longPressTimer.current = setTimeout(() => {
@@ -205,7 +235,7 @@ export default function TaskCard({
     }
   }, []);
 
-  const handleClick = (e) => {
+  const handleClick = (_e) => {
     // Don't navigate if it was a long press
     if (isLongPress.current) {
       isLongPress.current = false;
@@ -259,7 +289,7 @@ export default function TaskCard({
   const handleRejectTask = async () => {
     setRejecting(true);
     try {
-      await api.post(`/tasks/${task.id}/reject?reason=${encodeURIComponent(rejectReason)}`);
+      await api.post(`/tasks/${actionTaskId}/reject?reason=${encodeURIComponent(rejectReason)}`);
       setShowRejectModal(false);
       setRejectReason('');
       toast.success('Proof rejected');
@@ -271,11 +301,18 @@ export default function TaskCard({
     }
   };
 
+  const [subtaskStaffList, setSubtaskStaffList] = useState([]);
+
   const handleOpenSubTask = async (e) => {
     e.stopPropagation();
-    if (staffList.length === 0) {
-      await handleOpenAssign(e);
-      setShowAssignDropdown(false);
+    // Always reset form with correct title so reopening after cancel/create works
+    setSubTaskData({ title: task.title, assigned_to: '' });
+    try {
+      const response = await api.get('/users/subtask-staff');
+      setSubtaskStaffList(response.data);
+    } catch (error) {
+      toast.error('Failed to load staff list');
+      return;
     }
     setShowSubTaskModal(true);
   };
@@ -294,14 +331,34 @@ export default function TaskCard({
   const handleReassignTask = async (staffId, staffName) => {
     setReassigning(true);
     try {
-      await api.post(`/tasks/${task.id}/reassign?staff_id=${staffId}`);
+      // For parent task re-assign, use activeSubtaskId; for sub-task re-assign, use task.id
+      const targetId = activeSubtaskId || task.id;
+      await api.post(`/tasks/${targetId}/reassign?staff_id=${staffId}`);
       toast.success(`Sub-task reassigned to ${staffName}`);
       setShowReassignModal(false);
+      setActiveSubtaskId(null);
       onTaskUpdate?.();
     } catch (error) {
       toast.error('Failed to reassign task');
     } finally {
       setReassigning(false);
+    }
+  };
+
+  // Handler for re-assigning from the parent task card (sub-task ID already known from active_subtask)
+  const handleOpenParentReassign = async (e) => {
+    e.stopPropagation();
+    if (!task.active_subtask?.id) {
+      toast.error("No active sub-task found to re-assign");
+      return;
+    }
+    setActiveSubtaskId(task.active_subtask.id);
+    try {
+      const staffRes = await api.get('/users/subtask-staff');
+      setReassignStaffList(staffRes.data);
+      setShowReassignModal(true);
+    } catch (error) {
+      toast.error('Failed to load staff list');
     }
   };
 
@@ -324,7 +381,6 @@ export default function TaskCard({
       });
       toast.success('Sub-task created');
       setShowSubTaskModal(false);
-      setSubTaskData({ title: '', assigned_to: '' });
       onTaskUpdate?.();
     } catch (error) {
       toast.error('Failed to create sub-task');
@@ -337,7 +393,7 @@ export default function TaskCard({
     e.stopPropagation();
     setLoading(true);
     try {
-      await api.post(`/tasks/${task.id}/verify`);
+      await api.post(`/tasks/${actionTaskId}/verify`);
       toast.success("Task verified!");
       onTaskUpdate?.();
     } catch (error) {
@@ -515,6 +571,21 @@ export default function TaskCard({
           <Badge variant="outline" className="text-xs">
             {task.category}
           </Badge>
+
+          {/* Sub-task status pill — visible on supervisor/manager parent card */}
+          {activeSubtask && (
+            <Badge className={
+              activeSubtask.status === "COMPLETED"          ? "bg-emerald-100 text-emerald-700 text-xs" :
+              activeSubtask.status === "REJECTED"           ? "bg-red-100 text-red-700 text-xs" :
+              activeSubtask.status === "SUPERVISOR_VERIFIED"? "bg-teal-100 text-teal-700 text-xs" :
+              "bg-amber-100 text-amber-700 text-xs"
+            }>
+              {activeSubtask.status === "COMPLETED"           ? "Staff done — awaiting supervisor review" :
+               activeSubtask.status === "REJECTED"            ? "Staff needs to resubmit" :
+               activeSubtask.status === "SUPERVISOR_VERIFIED" ? "Supervisor approved — awaiting your review" :
+               activeSubtask.status === "IN_PROGRESS"         ? "Staff in progress" : "Staff pending"}
+            </Badge>
+          )}
         </div>
 
         {/* Action Buttons Row */}
@@ -526,6 +597,7 @@ export default function TaskCard({
           canAssign ||
           canCreateSubTask ||
           canReassign ||
+          canReassignSubtask ||
           showRejectionReason) && (
           <div
             className="flex items-center gap-2 mt-4 pt-3 border-t border-zinc-100 flex-wrap"
@@ -629,7 +701,7 @@ export default function TaskCard({
                   <Camera className="h-3.5 w-3.5 mr-1" />
                 )}
                 {hasProofPhotos
-                  ? `${task.proof_photos.length} Photo${task.proof_photos.length > 1 ? "s" : ""}`
+                  ? `${displayProofPhotos.length} Photo${displayProofPhotos.length > 1 ? "s" : ""}`
                   : "Add Proof"}
               </Button>
             )}
@@ -644,7 +716,7 @@ export default function TaskCard({
                 data-testid={`view-proof-${task.id}`}
               >
                 <Eye className="h-3.5 w-3.5 mr-1" />
-                View Proof ({task.proof_photos.length})
+                View Proof ({displayProofPhotos.length})
               </Button>
             )}
 
@@ -697,6 +769,18 @@ export default function TaskCard({
               </Button>
             )}
 
+            {canReassignSubtask && (
+              <Button
+                size="sm"
+                onClick={handleOpenParentReassign}
+                className="bg-blue-500 hover:bg-blue-600 text-white rounded-full h-8 px-4"
+                data-testid={`reassign-subtask-${task.id}`}
+              >
+                <UserPlus className="h-3.5 w-3.5 mr-1" />
+                Re-assign Sub-task
+              </Button>
+            )}
+
             {/* Verify Task Button */}
             {canVerify && (
               <Button
@@ -745,10 +829,14 @@ export default function TaskCard({
               <XCircle className="h-5 w-5 text-red-500" />
               <h3 className="text-lg font-semibold text-zinc-900">Proof Rejected</h3>
             </div>
-            <p className="text-sm text-zinc-500">Your proof was rejected by the manager. Please re-upload a valid proof.</p>
+            <p className="text-sm text-zinc-500">
+              {isSupervisor
+                ? "The manager rejected this sub-task after your verification. Guide the staff to fix the issue and re-verify once they resubmit."
+                : "Your proof was rejected by the manager. Please re-upload a valid proof."}
+            </p>
             <div className="bg-red-50 border border-red-200 rounded-xl p-3">
               <p className="text-sm font-medium text-red-700 mb-1">Reason:</p>
-              <p className="text-sm text-red-600">{task.rejection_reason}</p>
+              <p className="text-sm text-red-600">{displayRejectionReason}</p>
             </div>
             <Button
               className="w-full rounded-full bg-zinc-900 hover:bg-zinc-800 text-white"
@@ -816,7 +904,7 @@ export default function TaskCard({
               onClick={(e) => e.stopPropagation()}
             >
               <option value="">Select staff...</option>
-              {staffList.map(s => (
+              {subtaskStaffList.map(s => (
                 <option key={s.id} value={s.id}>{s.name} ({s.role})</option>
               ))}
             </select>
@@ -824,7 +912,7 @@ export default function TaskCard({
               <Button
                 variant="outline"
                 className="flex-1 rounded-full"
-                onClick={(e) => { e.stopPropagation(); setShowSubTaskModal(false); setSubTaskData({ title: '', assigned_to: '' }); }}
+                onClick={(e) => { e.stopPropagation(); setShowSubTaskModal(false); }}
               >
                 Cancel
               </Button>
@@ -890,7 +978,7 @@ export default function TaskCard({
             {/* Modal Header */}
             <div className="flex items-center justify-between p-4 border-b border-zinc-100">
               <h3 className="font-semibold text-zinc-900">
-                Proof Photos ({task.proof_photos.length})
+                Proof Photos ({displayProofPhotos.length})
               </h3>
               <Button
                 variant="ghost"
@@ -906,7 +994,7 @@ export default function TaskCard({
             {/* Modal Body - Photos Grid */}
             <div className="p-4 overflow-y-auto max-h-[70vh]">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {task.proof_photos.map((photo, index) => (
+                {displayProofPhotos.map((photo, index) => (
                   <div key={index} className="relative group">
                     <div className="aspect-video bg-zinc-100 rounded-xl overflow-hidden">
                       <img
@@ -974,7 +1062,7 @@ export default function TaskCard({
               size="sm"
               onClick={(e) => {
                 e.stopPropagation();
-                const index = task.proof_photos.indexOf(enlargedPhoto);
+                const index = displayProofPhotos.indexOf(enlargedPhoto);
                 handleDownloadPhoto(enlargedPhoto, index >= 0 ? index : 0);
               }}
               className="absolute bottom-4 right-4 bg-white text-zinc-900 hover:bg-zinc-100 rounded-full px-4"

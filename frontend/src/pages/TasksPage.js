@@ -214,14 +214,14 @@ export default function TasksPage() {
       if (user?.role === "STAFF" && newTask.assigned_to !== user.id) {
         return;
       }
-      // Supervisor sees tasks assigned to them OR sub-tasks they created that need action
+      // Sub-tasks are never shown as separate cards — they're embedded in parent card
+      if (newTask.parent_task_id) return;
+      // Supervisor: only see tasks assigned to them (excluding VERIFIED)
       if (user?.role === "SUPERVISOR") {
-        const isAssignedToMe = newTask.assigned_to === user.id;
-        const isMySubtaskNeedingAction = newTask.created_by === user.id &&
-          newTask.parent_task_id &&
-          ["COMPLETED", "REJECTED"].includes(newTask.status);
-        if (!isAssignedToMe && !isMySubtaskNeedingAction) return;
+        if (newTask.assigned_to !== user.id || newTask.status === "VERIFIED") return;
       }
+      // Staff: only see their own tasks
+      if (user?.role === "STAFF" && newTask.assigned_to !== user.id) return;
 
       if (matchesFilters) {
         setTasks((prev) => [newTask, ...prev]);
@@ -235,38 +235,52 @@ export default function TasksPage() {
     (message) => {
       const updatedTask = message.data;
       setTasks((prev) => {
-        const index = prev.findIndex((t) => t.id === updatedTask.id);
-        if (index === -1) {
-          // Task not in list, might need to add it if it matches filters now
-          return prev;
+        // All roles: when a sub-task changes status, update the parent card's active_subtask
+        // instead of treating the sub-task as its own list item
+        if (updatedTask.parent_task_id) {
+          return prev.map((t) => {
+            if (t.id === updatedTask.parent_task_id) {
+              const isStillActive = updatedTask.status !== "VERIFIED";
+              return {
+                ...t,
+                has_active_subtask: isStillActive,
+                active_subtask: isStillActive ? {
+                  id: updatedTask.id,
+                  status: updatedTask.status,
+                  proof_photos: updatedTask.proof_photos || [],
+                  rejection_reason: updatedTask.rejection_reason,
+                  supervisor_verified_at: updatedTask.supervisor_verified_at,
+                  assigned_to: updatedTask.assigned_to,
+                  assigned_to_name: updatedTask.assigned_to_name,
+                } : null,
+              };
+            }
+            return t;
+          });
         }
+
+        const index = prev.findIndex((t) => t.id === updatedTask.id);
+        if (index === -1) return prev;
 
         // Check if updated task still matches filters
         const matchesFilters =
           (filters.status === "ALL" || updatedTask.status === filters.status) &&
-          (filters.category === "ALL" ||
-            updatedTask.category === filters.category) &&
-          (filters.priority === "ALL" ||
-            updatedTask.priority === filters.priority);
+          (filters.category === "ALL" || updatedTask.category === filters.category) &&
+          (filters.priority === "ALL" || updatedTask.priority === filters.priority);
 
-        // Supervisor: remove sub-tasks from list once they no longer need action
-        const supervisorShouldHide = user?.role === "SUPERVISOR" &&
-          updatedTask.parent_task_id &&
-          updatedTask.created_by === user.id &&
-          updatedTask.assigned_to !== user.id &&
-          !["COMPLETED", "REJECTED"].includes(updatedTask.status);
+        // Supervisor: any VERIFIED task in their list means manager approved — remove it
+        const supervisorShouldRemove = user?.role === "SUPERVISOR" && updatedTask.status === "VERIFIED";
 
-        if (!matchesFilters || supervisorShouldHide) {
+        if (!matchesFilters || supervisorShouldRemove) {
           return prev.filter((t) => t.id !== updatedTask.id);
         }
 
-        // Update the task in place
         const newTasks = [...prev];
         newTasks[index] = updatedTask;
         return newTasks;
       });
     },
-    [filters],
+    [filters, user],
   );
 
   const handleTaskDeleted = useCallback((message) => {
@@ -680,28 +694,63 @@ export default function TasksPage() {
           </Card>
         )}
 	
-	{/* Pagination */}
-        {totalTasks > PAGE_SIZE && (
-          <div className="flex items-center justify-center gap-2 py-4">
-            <button
-              onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-              disabled={currentPage === 1}
-              className="px-4 py-2 rounded-full border border-zinc-200 text-sm disabled:opacity-40 hover:bg-zinc-50"
-            >
-              Previous
-            </button>
-            <span className="text-sm text-zinc-500">
-              Page {currentPage} of {Math.ceil(totalTasks / PAGE_SIZE)}
-            </span>
-            <button
-              onClick={() => setCurrentPage(p => p + 1)}
-              disabled={currentPage >= Math.ceil(totalTasks / PAGE_SIZE)}
-              className="px-4 py-2 rounded-full border border-zinc-200 text-sm disabled:opacity-40 hover:bg-zinc-50"
-            >
-              Next
-            </button>
-          </div>
-        )}
+        {/* Pagination */}
+        {totalTasks > PAGE_SIZE && (() => {
+          const totalPages = Math.ceil(totalTasks / PAGE_SIZE);
+          const getPageNumbers = () => {
+            const pages = [];
+            if (totalPages <= 7) {
+              for (let i = 1; i <= totalPages; i++) pages.push(i);
+            } else {
+              pages.push(1);
+              if (currentPage > 3) pages.push("...");
+              for (let i = Math.max(2, currentPage - 1); i <= Math.min(totalPages - 1, currentPage + 1); i++) {
+                pages.push(i);
+              }
+              if (currentPage < totalPages - 2) pages.push("...");
+              pages.push(totalPages);
+            }
+            return pages;
+          };
+          return (
+            <div className="flex items-center justify-center gap-1 py-4">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-2 rounded-lg border border-zinc-200 text-sm disabled:opacity-40 hover:bg-zinc-50 transition-colors"
+                data-testid="pagination-prev"
+              >
+                Previous
+              </button>
+              {getPageNumbers().map((page, i) =>
+                page === "..." ? (
+                  <span key={`ellipsis-${i}`} className="px-2 py-2 text-sm text-zinc-400">…</span>
+                ) : (
+                  <button
+                    key={page}
+                    onClick={() => setCurrentPage(page)}
+                    className={`w-9 h-9 rounded-lg text-sm font-medium transition-colors ${
+                      currentPage === page
+                        ? "bg-[#E23744] text-white"
+                        : "border border-zinc-200 text-zinc-700 hover:bg-zinc-50"
+                    }`}
+                    data-testid={`pagination-page-${page}`}
+                  >
+                    {page}
+                  </button>
+                )
+              )}
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className="px-3 py-2 rounded-lg border border-zinc-200 text-sm disabled:opacity-40 hover:bg-zinc-50 transition-colors"
+                data-testid="pagination-next"
+              >
+                Next
+              </button>
+            </div>
+          );
+        })()}
 
       </div>
 
@@ -710,7 +759,8 @@ export default function TasksPage() {
         onClose={() => setShowCreateTask(false)}
         onSuccess={() => {
           setShowCreateTask(false);
-          fetchTasks();
+          const newLastPage = Math.ceil((totalTasks + 1) / PAGE_SIZE);
+          setCurrentPage(newLastPage);
         }}
       />
     </Layout>
