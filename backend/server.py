@@ -900,20 +900,15 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
     if current_user.role == "STAFF":
         query = query.filter(Task.assigned_to == current_user.id)
     elif current_user.role == "SUPERVISOR":
-        # Supervisor sees:
-        # 1. Tasks assigned to them (parent tasks from owner/manager)
-        # 2. Sub-tasks they created ONLY when action is needed (COMPLETED=needs verification, REJECTED=staff must redo)
-        from sqlalchemy import or_, and_
+        # Supervisor sees only tasks assigned to them (parent tasks), excluding VERIFIED ones.
+        # Sub-task info is embedded inside the parent task response — no separate sub-task cards.
+        from sqlalchemy import and_
         query = query.filter(
-            or_(
-                Task.assigned_to == current_user.id,
-                and_(
-                    Task.created_by == current_user.id,
-                    Task.parent_task_id != None,
-                    Task.status.in_(["COMPLETED", "REJECTED"])
-                )
-            )
+            and_(Task.assigned_to == current_user.id, Task.status != "VERIFIED")
         )
+    else:
+        # MANAGER / OWNER: see all parent tasks only — sub-tasks are embedded in the parent card.
+        query = query.filter(Task.parent_task_id == None)
     if status:
         query = query.filter(Task.status == status)
     if category:
@@ -928,6 +923,19 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
     today = now.day
 
     tasks = query.order_by(Task.created_at.asc()).all()
+
+    # Batch query: fetch active (non-VERIFIED) sub-task for each parent task in one query
+    all_task_ids = [t.id for t in tasks]
+    active_subtask_map = {}  # parent_task_id -> Task object
+    if all_task_ids:
+        active_subtask_rows = db.query(Task).filter(
+            Task.parent_task_id.in_(all_task_ids),
+            Task.is_deleted == False,
+            Task.status != "VERIFIED"
+        ).all()
+        for sub in active_subtask_rows:
+            active_subtask_map[sub.parent_task_id] = sub  # latest active sub-task per parent
+
     result = []
     for task in tasks:
         # For recurring tasks: check today is in schedule and allocated time has passed
@@ -936,7 +944,23 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
                 continue
             if task.allocated_datetime and task.allocated_datetime > now:
                 continue
-        result.append(task_to_response(task))
+        t_resp = task_to_response(task)
+        active_sub = active_subtask_map.get(task.id)
+        if active_sub:
+            t_resp["has_active_subtask"] = True
+            t_resp["active_subtask"] = {
+                "id": active_sub.id,
+                "status": (active_sub.status or "PENDING").upper(),
+                "proof_photos": active_sub.proof_photos or [],
+                "rejection_reason": active_sub.rejection_reason,
+                "supervisor_verified_at": active_sub.supervisor_verified_at.isoformat() if active_sub.supervisor_verified_at else None,
+                "assigned_to": active_sub.assigned_to,
+                "assigned_to_name": active_sub.assigned_to_name,
+            }
+        else:
+            t_resp["has_active_subtask"] = False
+            t_resp["active_subtask"] = None
+        result.append(t_resp)
     total = len(result)
     paginated = result[offset:offset + limit]
     return {"tasks": paginated, "total": total, "limit": limit, "offset": offset, "has_more": offset + limit < total}
@@ -1145,6 +1169,19 @@ async def create_subtask(task_id: str, task_data: TaskCreate, db: Session = Depe
         await create_notification(db, task_data.assigned_to, "TASK_ASSIGNED", "New Sub-Task Assigned",
                                   f"You have been assigned a sub-task: {task.title}", task.id)
     await manager.broadcast_to_all({"type": "task_created", "data": task_to_response(task)})
+    # Broadcast parent task update so supervisor card shows Re-assign button and sub-task status immediately
+    parent_response = task_to_response(parent_task)
+    parent_response["has_active_subtask"] = True
+    parent_response["active_subtask"] = {
+        "id": task.id,
+        "status": task.status,
+        "proof_photos": task.proof_photos or [],
+        "rejection_reason": task.rejection_reason,
+        "supervisor_verified_at": None,
+        "assigned_to": task.assigned_to,
+        "assigned_to_name": task.assigned_to_name,
+    }
+    await manager.broadcast_to_all({"type": "task_update", "data": parent_response})
     return task_to_response(task)
 
 @api_router.get("/tasks/{task_id}/subtasks")
@@ -1235,6 +1272,30 @@ async def verify_task(task_id: str, db: Session = Depends(get_db),
         if task.assigned_to:
             await create_notification(db, task.assigned_to, "TASK_VERIFIED", "Task Verified",
                                       f"Your task '{task.title}' has been fully verified!", task.id)
+        # If this was a sub-task, auto-verify the parent task when no active sub-tasks remain
+        if task.parent_task_id:
+            parent_task = db.query(Task).filter(Task.id == task.parent_task_id, Task.is_deleted == False).first()
+            if parent_task:
+                remaining_active = db.query(Task).filter(
+                    Task.parent_task_id == task.parent_task_id,
+                    Task.is_deleted == False,
+                    Task.status != "VERIFIED"
+                ).count()
+                if remaining_active == 0:
+                    # All sub-tasks done — mark parent task as VERIFIED too
+                    parent_task.status = "VERIFIED"
+                    parent_task.verified_at = now_sl()
+                    parent_task.verified_by = current_user.id
+                    db.commit()
+                    create_activity_log(db, parent_task.id, current_user.id, current_user.name,
+                                        "VERIFIED", "Auto-verified: all sub-tasks have been verified")
+                    if parent_task.assigned_to:
+                        await create_notification(db, parent_task.assigned_to, "TASK_VERIFIED", "Task Fully Verified",
+                                                  f"Your task '{parent_task.title}' has been fully verified!", parent_task.id)
+                parent_response = task_to_response(parent_task)
+                parent_response["has_active_subtask"] = remaining_active > 0
+                parent_response["active_subtask"] = None
+                await manager.broadcast_to_all({"type": "task_update", "data": parent_response})
     await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
     return task_to_response(task)
 
@@ -1251,9 +1312,15 @@ async def reject_task(task_id: str, reason: str = "", db: Session = Depends(get_
             raise HTTPException(status_code=403, detail="You can only reject sub-tasks you created")
         if task.status != "COMPLETED":
             raise HTTPException(status_code=400, detail="Can only reject a COMPLETED sub-task")
+    was_supervisor_verified = task.status == "SUPERVISOR_VERIFIED"
+    supervisor_id = task.supervisor_verified_by  # capture before clearing
     task.status = "REJECTED"
     task.proof_photos = []
     task.rejection_reason = reason
+    # Reset supervisor verification stamps so supervisor can re-verify after staff fixes and resubmits
+    if was_supervisor_verified:
+        task.supervisor_verified_at = None
+        task.supervisor_verified_by = None
     db.commit()
     create_activity_log(db, task.id, current_user.id, current_user.name, "REJECTED", f"Proof rejected: {reason}")
     if task.assigned_to:
@@ -1266,6 +1333,11 @@ async def reject_task(task_id: str, reason: str = "", db: Session = Depends(get_
                 "Proof Rejected",
                 f"Your proof for '{task.title}' was rejected. {reason}"
             )
+    # Notify the supervisor when manager/owner overrules their verification
+    if was_supervisor_verified and supervisor_id and current_user.role in ("OWNER", "MANAGER"):
+        await create_notification(db, supervisor_id, "TASK_REJECTED", "Your Verification Was Overruled",
+                                  f"Manager rejected sub-task '{task.title}' after your verification. "
+                                  f"Reason: {reason}. Staff must resubmit — please re-verify once fixed.", task.id)
     await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
     return task_to_response(task)
 
