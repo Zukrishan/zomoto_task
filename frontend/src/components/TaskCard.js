@@ -795,7 +795,7 @@ export default function TaskCard({
                 ) : (
                   <ShieldCheck className="h-3.5 w-3.5 mr-1" />
                 )}
-                {isSupervisor ? "S-Verify" : "Verify"}
+                Verify
               </Button>
             )}
 

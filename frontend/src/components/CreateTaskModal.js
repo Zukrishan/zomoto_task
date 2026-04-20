@@ -335,25 +335,6 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
 
         {/* Form */}
         <form onSubmit={handleSubmit(onSubmit)} className="p-6 space-y-4">
-          {/* Task Type */}
-          <div className="space-y-2">
-            <Label>Task Type</Label>
-            <Select value={taskType} onValueChange={setTaskType}>
-              <SelectTrigger className="rounded-xl" data-testid="task-type-select">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {TASK_TYPE_OPTIONS.map(opt => (
-                  <SelectItem key={opt.value} value={opt.value}>
-                    <div className="flex items-center gap-2">
-                      {opt.value === 'RECURRING' && <Repeat className="h-4 w-4" />}
-                      {opt.label}
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
 
           {/* Recurring Task Schedule */}
           {taskType === 'RECURRING' && (

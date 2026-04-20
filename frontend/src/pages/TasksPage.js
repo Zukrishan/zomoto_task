@@ -19,7 +19,6 @@ import api, { getErrorMessage } from "../lib/api";
 import Layout from "../components/Layout";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { Checkbox } from "../components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -268,10 +267,12 @@ export default function TasksPage() {
           (filters.category === "ALL" || updatedTask.category === filters.category) &&
           (filters.priority === "ALL" || updatedTask.priority === filters.priority);
 
-        // Supervisor: any VERIFIED task in their list means manager approved — remove it
-        const supervisorShouldRemove = user?.role === "SUPERVISOR" && updatedTask.status === "VERIFIED";
+        // VERIFIED tasks disappear from all roles' lists
+        if (updatedTask.status === "VERIFIED") {
+          return prev.filter((t) => t.id !== updatedTask.id);
+        }
 
-        if (!matchesFilters || supervisorShouldRemove) {
+        if (!matchesFilters) {
           return prev.filter((t) => t.id !== updatedTask.id);
         }
 
@@ -473,7 +474,7 @@ export default function TasksPage() {
                 data-testid="create-task-btn"
               >
                 <Plus className="h-4 w-4 mr-2" />
-                New Task
+                New Instant Task
               </Button>
             )}
           </div>
