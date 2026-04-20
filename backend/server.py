@@ -898,17 +898,19 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
               db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     query = db.query(Task).filter(Task.is_deleted == False, Task.is_archived == False)
     if current_user.role == "STAFF":
-        query = query.filter(Task.assigned_to == current_user.id)
+        # Staff see their own tasks, excluding VERIFIED (done tasks disappear)
+        query = query.filter(Task.assigned_to == current_user.id, Task.status != "VERIFIED")
     elif current_user.role == "SUPERVISOR":
-        # Supervisor sees only tasks assigned to them (parent tasks), excluding VERIFIED ones.
-        # Sub-task info is embedded inside the parent task response — no separate sub-task cards.
+        # Supervisor sees only parent tasks assigned to them, excluding VERIFIED.
+        # Sub-task info is embedded in the parent task response — no separate sub-task cards.
         from sqlalchemy import and_
         query = query.filter(
             and_(Task.assigned_to == current_user.id, Task.status != "VERIFIED")
         )
     else:
-        # MANAGER / OWNER: see all parent tasks only — sub-tasks are embedded in the parent card.
-        query = query.filter(Task.parent_task_id == None)
+        # MANAGER / OWNER: see all parent tasks only, excluding VERIFIED (done tasks disappear).
+        # Sub-tasks are embedded in the parent card.
+        query = query.filter(Task.parent_task_id == None, Task.status != "VERIFIED")
     if status:
         query = query.filter(Task.status == status)
     if category:
@@ -922,7 +924,7 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
     now = now_sl()
     today = now.day
 
-    tasks = query.order_by(Task.created_at.asc()).all()
+    tasks = query.order_by(Task.created_at.desc()).all()
 
     # Batch query: fetch active (non-VERIFIED) sub-task for each parent task in one query
     all_task_ids = [t.id for t in tasks]
