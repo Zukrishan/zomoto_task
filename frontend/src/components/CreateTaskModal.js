@@ -3,8 +3,8 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { toast } from 'sonner';
-import { Loader2, Plus, Calendar as CalendarIcon, X, Clock, Repeat, Trash2 } from 'lucide-react';
-import { format, addHours, addMinutes, addMonths } from 'date-fns';
+import { Loader2, Plus, Calendar as CalendarIcon, X, Clock, Repeat } from 'lucide-react';
+import { format, addHours, addMinutes } from 'date-fns';
 import api, { getErrorMessage } from '../lib/api';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -23,6 +23,7 @@ import {
   PopoverTrigger,
 } from './ui/popover';
 import { Calendar } from './ui/calendar';
+import { Switch } from './ui/switch';
 
 const taskSchema = z.object({
   title: z.string().min(1, 'Task title is required'),
@@ -68,9 +69,10 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
   const [timeUnit, setTimeUnit] = useState('MINUTES');
   
   // Recurring task state
-  const [recurrenceIntervals, setRecurrenceIntervals] = useState([
-    { start_day: 1, end_day: 5 }
-  ]);
+  const [recurrenceStartDate, setRecurrenceStartDate] = useState(null);
+  const [recurrenceEndDate, setRecurrenceEndDate] = useState(null);
+  const [frequencyDays, setFrequencyDays] = useState(1);
+  const [isInfinite, setIsInfinite] = useState(true);
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
     resolver: zodResolver(taskSchema),
@@ -158,53 +160,19 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     setShowTemplateList(false);
   };
 
-  // Recurring interval management
-  const addInterval = () => {
-    if (recurrenceIntervals.length >= 5) {
-      toast.error('Maximum 5 intervals allowed');
-      return;
-    }
-    setRecurrenceIntervals([...recurrenceIntervals, { start_day: 1, end_day: 5 }]);
-  };
-
-  const removeInterval = (index) => {
-    if (recurrenceIntervals.length <= 1) {
-      toast.error('At least one interval is required');
-      return;
-    }
-    setRecurrenceIntervals(recurrenceIntervals.filter((_, i) => i !== index));
-  };
-
-  const updateInterval = (index, field, value) => {
-    const newIntervals = [...recurrenceIntervals];
-    newIntervals[index] = { ...newIntervals[index], [field]: parseInt(value) || 1 };
-    setRecurrenceIntervals(newIntervals);
-  };
-
-  const validateIntervals = () => {
-    for (const interval of recurrenceIntervals) {
-      if (interval.start_day < 1 || interval.start_day > 31) {
-        toast.error('Start day must be between 1 and 31');
-        return false;
-      }
-      if (interval.end_day < 1 || interval.end_day > 31) {
-        toast.error('End day must be between 1 and 31');
-        return false;
-      }
-      if (interval.start_day > interval.end_day) {
-        toast.error('Start day cannot be greater than end day');
-        return false;
-      }
-    }
-    return true;
-  };
 
   const onSubmit = async (data) => {
-    // Validate recurring intervals if task type is RECURRING
-    if (taskType === 'RECURRING' && !validateIntervals()) {
-      return;
+    if (taskType === 'RECURRING') {
+      if (!recurrenceStartDate) {
+        toast.error('Start date is required for recurring tasks');
+        return;
+      }
+      if (!frequencyDays || frequencyDays < 1) {
+        toast.error('Frequency must be at least 1 day');
+        return;
+      }
     }
-    
+
     setLoading(true);
     try {
       // Combine date and time for allocated_datetime
@@ -224,22 +192,12 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
         assigned_to: selectedStaff || null,
       };
       
-      // Add recurring fields if task type is RECURRING
       if (taskType === 'RECURRING') {
-        taskData.recurrence_type = 'MONTHLY';
-        // Convert interval ranges to flat list of day numbers
-        const daysList = [];
-        recurrenceIntervals.forEach(interval => {
-          const startDay = parseInt(interval.start_day) || 1;
-          const endDay = parseInt(interval.end_day) || startDay;
-          for (let day = Math.min(startDay, endDay); day <= Math.max(startDay, endDay); day++) {
-            if (day >= 1 && day <= 31 && !daysList.includes(day)) {
-              daysList.push(day);
-            }
-          }
-        });
-        taskData.recurrence_intervals = daysList.sort((a, b) => a - b);
-        taskData.recurrence_end_date = addMonths(new Date(), 1).toISOString();
+        taskData.recurrence_type = 'DATE_RANGE';
+        taskData.recurrence_start_date = recurrenceStartDate ? format(recurrenceStartDate, 'yyyy-MM-dd') : null;
+        taskData.recurrence_end_date = (!isInfinite && recurrenceEndDate) ? format(recurrenceEndDate, 'yyyy-MM-dd') : null;
+        taskData.frequency_days = parseInt(frequencyDays) || 1;
+        taskData.recurrence_intervals = [];
       }
       
       await api.post('/tasks', taskData);
@@ -267,7 +225,10 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     setTaskType('INSTANT');
     setTimeInterval(30);
     setTimeUnit('MINUTES');
-    setRecurrenceIntervals([{ start_day: 1, end_day: 5 }]);
+    setRecurrenceStartDate(null);
+    setRecurrenceEndDate(null);
+    setFrequencyDays(1);
+    setIsInfinite(true);
     setShowTemplateList(false);
     onClose();
   };
@@ -339,78 +300,92 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
           {/* Recurring Task Schedule */}
           {taskType === 'RECURRING' && (
             <div className="space-y-3 p-4 bg-blue-50 rounded-xl border border-blue-200">
-              <div className="flex items-center justify-between">
-                <Label className="text-blue-800 flex items-center gap-2">
-                  <Repeat className="h-4 w-4" />
-                  Monthly Schedule (Day Intervals)
-                </Label>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={addInterval}
-                  className="h-8 text-blue-600 border-blue-300 hover:bg-blue-100"
-                  data-testid="add-interval-btn"
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Add
-                </Button>
+              <Label className="text-blue-800 flex items-center gap-2">
+                <Repeat className="h-4 w-4" />
+                Recurring Schedule
+              </Label>
+
+              {/* Start Date */}
+              <div className="space-y-1">
+                <Label className="text-sm">Start Date</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button type="button" variant="outline" className="w-full justify-start rounded-xl bg-white" data-testid="recurrence-start-date-btn">
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {recurrenceStartDate ? format(recurrenceStartDate, 'MMM d, yyyy') : 'Pick a start date'}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <Calendar
+                      mode="single"
+                      selected={recurrenceStartDate}
+                      onSelect={(d) => setRecurrenceStartDate(d || null)}
+                      initialFocus
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
-              
-              <p className="text-xs text-blue-600">
-                Task will be visible to assigned staff during these day intervals each month
-              </p>
-              
-              <div className="space-y-2">
-                {recurrenceIntervals.map((interval, index) => (
-                  <div key={index} className="flex items-center gap-2 bg-white p-2 rounded-lg">
-                    <span className="text-sm text-zinc-500 w-16">Day</span>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="31"
-                      value={interval.start_day}
-                      onChange={(e) => updateInterval(index, 'start_day', e.target.value)}
-                      className="w-16 h-9 text-center rounded-lg"
-                      data-testid={`interval-${index}-start`}
+
+              {/* End Date + Infinite toggle */}
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm">End Date</Label>
+                  <div className="flex items-center gap-2 text-sm text-blue-700">
+                    <span>Runs forever</span>
+                    <Switch
+                      checked={isInfinite}
+                      onCheckedChange={(v) => { setIsInfinite(v); if (v) setRecurrenceEndDate(null); }}
+                      data-testid="infinite-toggle"
                     />
-                    <span className="text-zinc-400">to</span>
-                    <Input
-                      type="number"
-                      min="1"
-                      max="31"
-                      value={interval.end_day}
-                      onChange={(e) => updateInterval(index, 'end_day', e.target.value)}
-                      className="w-16 h-9 text-center rounded-lg"
-                      data-testid={`interval-${index}-end`}
-                    />
-                    {recurrenceIntervals.length > 1 && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => removeInterval(index)}
-                        className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
-                        data-testid={`remove-interval-${index}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
                   </div>
-                ))}
+                </div>
+                {!isInfinite && (
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" className="w-full justify-start rounded-xl bg-white" data-testid="recurrence-end-date-btn">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {recurrenceEndDate ? format(recurrenceEndDate, 'MMM d, yyyy') : 'Pick an end date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={recurrenceEndDate}
+                        onSelect={(d) => setRecurrenceEndDate(d || null)}
+                        disabled={(d) => recurrenceStartDate && d < recurrenceStartDate}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                )}
               </div>
-              
-              {/* Schedule Preview */}
-              <div className="text-xs text-blue-700 bg-blue-100 p-2 rounded-lg">
-                <strong>Preview:</strong> Task visible on days{' '}
-                {recurrenceIntervals.map((interval, i) => (
-                  <span key={i}>
-                    {interval.start_day}-{interval.end_day}
-                    {i < recurrenceIntervals.length - 1 ? ', ' : ''}
+
+              {/* Frequency */}
+              <div className="space-y-1">
+                <Label className="text-sm">Repeat every</Label>
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min="1"
+                    max="365"
+                    value={frequencyDays}
+                    onChange={(e) => setFrequencyDays(parseInt(e.target.value) || 1)}
+                    className="w-24 rounded-xl bg-white"
+                    data-testid="frequency-days-input"
+                  />
+                  <span className="text-sm text-blue-700">
+                    {frequencyDays === 1 ? 'day (daily)' : frequencyDays === 7 ? 'days (weekly)' : 'days'}
                   </span>
-                ))}
-                {' '}of each month
+                </div>
               </div>
+
+              {/* Preview */}
+              {recurrenceStartDate && frequencyDays && (
+                <div className="text-xs text-blue-700 bg-blue-100 p-2 rounded-lg">
+                  Starting {format(recurrenceStartDate, 'MMM d, yyyy')}, runs every {frequencyDays} day{frequencyDays !== 1 ? 's' : ''}
+                  {isInfinite ? ', forever' : recurrenceEndDate ? ` until ${format(recurrenceEndDate, 'MMM d, yyyy')}` : ''}
+                </div>
+              )}
             </div>
           )}
 

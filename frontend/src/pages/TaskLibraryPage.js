@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { toast } from 'sonner';
-import { Plus, Search, BookOpen, Trash2, Loader2, Calendar, Clock, Repeat, Power, PowerOff, User, Timer, Pencil } from 'lucide-react';
+import { Plus, Search, BookOpen, Trash2, Loader2, Calendar as CalendarIcon, Clock, Repeat, Power, PowerOff, User, Timer, Pencil } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
 import api, { getErrorMessage } from '../lib/api';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
@@ -15,14 +16,20 @@ import {
   DialogTitle,
 } from '../components/ui/dialog';
 import { Label } from '../components/ui/label';
-import { 
+import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue 
+  SelectValue
 } from '../components/ui/select';
 import { Switch } from '../components/ui/switch';
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '../components/ui/popover';
+import { Calendar } from '../components/ui/calendar';
 
 const PRIORITY_OPTIONS = ['HIGH', 'MEDIUM', 'LOW'];
 const PRIORITY_COLORS = {
@@ -42,9 +49,12 @@ const DEFAULT_FORM = {
   time_interval: 30,
   time_unit: 'MINUTES',
   is_recurring: false,
-  day_intervals: '',
   allocated_time: '09:00',
   assigned_to: '',
+  recurrence_start_date: null,
+  recurrence_end_date: null,
+  frequency_days: 1,
+  is_infinite: true,
 };
 
 export default function TaskLibraryPage() {
@@ -96,15 +106,37 @@ export default function TaskLibraryPage() {
       toast.error('Task name is required');
       return;
     }
-    if (formData.is_recurring && !formData.day_intervals.trim()) {
-      toast.error('Day intervals are required for recurring tasks');
-      return;
+    if (formData.is_recurring) {
+      if (!formData.recurrence_start_date) {
+        toast.error('Start date is required for recurring tasks');
+        return;
+      }
+      if (!formData.frequency_days || formData.frequency_days < 1) {
+        toast.error('Frequency must be at least 1 day');
+        return;
+      }
+      if (!formData.is_infinite && formData.recurrence_end_date && formData.recurrence_end_date < formData.recurrence_start_date) {
+        toast.error('End date must be after start date');
+        return;
+      }
     }
     setCreating(true);
     try {
       const payload = {
-        ...formData,
+        title: formData.title,
+        description: formData.description,
+        category: formData.category,
+        priority: formData.priority,
+        time_interval: formData.time_interval,
+        time_unit: formData.time_unit,
+        is_recurring: formData.is_recurring,
+        allocated_time: formData.allocated_time,
         assigned_to: formData.assigned_to || null,
+        ...(formData.is_recurring && {
+          recurrence_start_date: formData.recurrence_start_date ? format(formData.recurrence_start_date, 'yyyy-MM-dd') : null,
+          recurrence_end_date: (!formData.is_infinite && formData.recurrence_end_date) ? format(formData.recurrence_end_date, 'yyyy-MM-dd') : null,
+          frequency_days: parseInt(formData.frequency_days) || 1,
+        }),
       };
       if (editingTemplate) {
         await api.put(`/task-templates/${editingTemplate.id}`, payload);
@@ -134,9 +166,12 @@ export default function TaskLibraryPage() {
       time_interval: template.time_interval || 30,
       time_unit: template.time_unit || 'MINUTES',
       is_recurring: template.is_recurring || false,
-      day_intervals: template.day_intervals || '',
       allocated_time: template.allocated_time || '09:00',
       assigned_to: template.assigned_to || '',
+      recurrence_start_date: template.recurrence_start_date ? parseISO(template.recurrence_start_date) : null,
+      recurrence_end_date: template.recurrence_end_date ? parseISO(template.recurrence_end_date) : null,
+      frequency_days: template.frequency_days || 1,
+      is_infinite: template.recurrence_end_date == null,
     });
     setShowCreate(true);
   };
@@ -408,23 +443,91 @@ export default function TaskLibraryPage() {
             {/* Recurring fields */}
             {formData.is_recurring && (
               <div className="space-y-3 p-3 bg-blue-50/50 rounded-xl border border-blue-100">
-                <div className="space-y-2">
+                {/* Start Date */}
+                <div className="space-y-1">
                   <Label className="flex items-center gap-1">
-                    <Calendar className="h-3.5 w-3.5" />
-                    Day Intervals (days of month)
+                    <CalendarIcon className="h-3.5 w-3.5" />
+                    Start Date
                   </Label>
-                  <Input
-                    value={formData.day_intervals}
-                    onChange={(e) => setFormData({ ...formData, day_intervals: e.target.value })}
-                    placeholder="e.g., 1-5, 10-15, 20"
-                    className="rounded-xl bg-white"
-                    data-testid="day-intervals-input"
-                  />
-                  <p className="text-xs text-zinc-400">
-                    Enter day ranges. Example: "1-5, 10-15" means days 1-5 and 10-15 of every month
-                  </p>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button type="button" variant="outline" className="w-full justify-start rounded-xl bg-white" data-testid="recurrence-start-date-btn">
+                        <CalendarIcon className="mr-2 h-4 w-4" />
+                        {formData.recurrence_start_date ? format(formData.recurrence_start_date, 'MMM d, yyyy') : 'Pick a start date'}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={formData.recurrence_start_date}
+                        onSelect={(d) => setFormData({ ...formData, recurrence_start_date: d || null })}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
                 </div>
-                <div className="space-y-2">
+
+                {/* End Date + Infinite toggle */}
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="flex items-center gap-1">
+                      <CalendarIcon className="h-3.5 w-3.5" />
+                      End Date
+                    </Label>
+                    <div className="flex items-center gap-2 text-sm text-blue-700">
+                      <span>Runs forever</span>
+                      <Switch
+                        checked={formData.is_infinite}
+                        onCheckedChange={(v) => setFormData({ ...formData, is_infinite: v, recurrence_end_date: v ? null : formData.recurrence_end_date })}
+                        data-testid="infinite-toggle"
+                      />
+                    </div>
+                  </div>
+                  {!formData.is_infinite && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button type="button" variant="outline" className="w-full justify-start rounded-xl bg-white" data-testid="recurrence-end-date-btn">
+                          <CalendarIcon className="mr-2 h-4 w-4" />
+                          {formData.recurrence_end_date ? format(formData.recurrence_end_date, 'MMM d, yyyy') : 'Pick an end date'}
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={formData.recurrence_end_date}
+                          onSelect={(d) => setFormData({ ...formData, recurrence_end_date: d || null })}
+                          disabled={(d) => formData.recurrence_start_date && d < formData.recurrence_start_date}
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                </div>
+
+                {/* Frequency */}
+                <div className="space-y-1">
+                  <Label className="flex items-center gap-1">
+                    <Repeat className="h-3.5 w-3.5" />
+                    Repeat every
+                  </Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      type="number"
+                      min="1"
+                      max="365"
+                      value={formData.frequency_days}
+                      onChange={(e) => setFormData({ ...formData, frequency_days: parseInt(e.target.value) || 1 })}
+                      className="w-24 rounded-xl bg-white"
+                      data-testid="frequency-days-input"
+                    />
+                    <span className="text-sm text-blue-700">
+                      {formData.frequency_days === 1 ? 'day (daily)' : formData.frequency_days === 7 ? 'days (weekly)' : 'days'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Task Time */}
+                <div className="space-y-1">
                   <Label className="flex items-center gap-1">
                     <Clock className="h-3.5 w-3.5" />
                     Task Time
@@ -437,6 +540,14 @@ export default function TaskLibraryPage() {
                     data-testid="allocated-time-input"
                   />
                 </div>
+
+                {/* Preview */}
+                {formData.recurrence_start_date && formData.frequency_days && (
+                  <p className="text-xs text-blue-600 bg-blue-100 p-2 rounded-lg">
+                    Starting {format(formData.recurrence_start_date, 'MMM d, yyyy')}, runs every {formData.frequency_days} day{formData.frequency_days !== 1 ? 's' : ''}
+                    {formData.is_infinite ? ', forever' : formData.recurrence_end_date ? ` until ${format(formData.recurrence_end_date, 'MMM d, yyyy')}` : ''}
+                  </p>
+                )}
               </div>
             )}
 
@@ -492,11 +603,24 @@ function TemplateCard({ template, onEdit, onDelete, onToggle }) {
               )}
             </div>
             {isRecurring && (
-              <div className="flex items-center gap-3 mt-1.5 text-xs text-blue-600">
-                <span className="flex items-center gap-1">
-                  <Calendar className="h-3 w-3" />
-                  Days: {template.day_intervals || 'Not set'}
-                </span>
+              <div className="flex items-center gap-3 mt-1.5 text-xs text-blue-600 flex-wrap">
+                {template.recurrence_start_date ? (
+                  <span className="flex items-center gap-1">
+                    <CalendarIcon className="h-3 w-3" />
+                    {format(parseISO(template.recurrence_start_date), 'MMM d, yyyy')}
+                    {template.recurrence_end_date
+                      ? ` → ${format(parseISO(template.recurrence_end_date), 'MMM d, yyyy')}`
+                      : ' → forever'}
+                  </span>
+                ) : template.day_intervals ? (
+                  <span className="flex items-center gap-1">
+                    <CalendarIcon className="h-3 w-3" />
+                    Days: {template.day_intervals}
+                  </span>
+                ) : null}
+                {template.frequency_days && (
+                  <span>Every {template.frequency_days}d</span>
+                )}
                 {template.allocated_time && (
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
