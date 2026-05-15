@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, String, Text, DateTime, Boolean, Integer, ForeignKey, Enum as SQLEnum, JSON
+from sqlalchemy import create_engine, Column, String, Text, DateTime, Boolean, Integer, ForeignKey, Enum as SQLEnum, JSON, Date
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, Session
 from sqlalchemy.pool import QueuePool
@@ -212,6 +212,9 @@ class TaskTemplate(Base):
     is_recurring = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     day_intervals = Column(String(255))
+    recurrence_start_date = Column(Date, nullable=True)
+    recurrence_end_date = Column(Date, nullable=True)
+    frequency_days = Column(Integer, nullable=True)
     allocated_time = Column(String(10))  # "HH:MM" in SL time
     assigned_to = Column(String(36), ForeignKey("users.id"))
     assigned_to_name = Column(String(255))
@@ -401,6 +404,9 @@ class TemplateCreate(BaseModel):
     day_intervals: Optional[str] = None
     allocated_time: Optional[str] = None  # "HH:MM" in SL time
     assigned_to: Optional[str] = None
+    recurrence_start_date: Optional[date] = None
+    recurrence_end_date: Optional[date] = None
+    frequency_days: Optional[int] = None
 
 class TemplateUpdate(BaseModel):
     title: Optional[str] = None
@@ -414,6 +420,9 @@ class TemplateUpdate(BaseModel):
     day_intervals: Optional[str] = None
     allocated_time: Optional[str] = None
     assigned_to: Optional[str] = None
+    recurrence_start_date: Optional[date] = None
+    recurrence_end_date: Optional[date] = None
+    frequency_days: Optional[int] = None
 
 class TemplateResponse(BaseModel):
     id: str
@@ -430,6 +439,9 @@ class TemplateResponse(BaseModel):
     assigned_to: Optional[str] = None
     assigned_to_name: Optional[str] = None
     created_at: datetime
+    recurrence_start_date: Optional[date] = None
+    recurrence_end_date: Optional[date] = None
+    frequency_days: Optional[int] = None
     class Config:
         from_attributes = True
 
@@ -733,6 +745,9 @@ def template_to_response(t: TaskTemplate) -> dict:
         "assigned_to": t.assigned_to,
         "assigned_to_name": t.assigned_to_name,
         "created_at": t.created_at.isoformat() if t.created_at else None,
+        "recurrence_start_date": t.recurrence_start_date.isoformat() if t.recurrence_start_date else None,
+        "recurrence_end_date": t.recurrence_end_date.isoformat() if t.recurrence_end_date else None,
+        "frequency_days": t.frequency_days,
     }
 
 @api_router.get("/task-templates")
@@ -755,7 +770,10 @@ def create_template(template_data: TemplateCreate, db: Session = Depends(get_db)
         is_recurring=template_data.is_recurring, day_intervals=template_data.day_intervals,
         allocated_time=template_data.allocated_time,  # stored as "HH:MM" SL time
         assigned_to=template_data.assigned_to, assigned_to_name=assigned_to_name,
-        created_by=current_user.id
+        created_by=current_user.id,
+        recurrence_start_date=template_data.recurrence_start_date,
+        recurrence_end_date=template_data.recurrence_end_date,
+        frequency_days=template_data.frequency_days,
     )
     db.add(template)
     db.commit()
@@ -776,6 +794,10 @@ def update_template(template_id: str, template_data: TemplateUpdate, db: Session
     for key, value in update_fields.items():
         if value is not None:
             setattr(template, key, value)
+    # Handle nullable recurrence fields explicitly (the loop above skips None values)
+    for field in ('recurrence_start_date', 'recurrence_end_date', 'frequency_days'):
+        if field in update_fields:
+            setattr(template, field, update_fields[field])
     db.commit()
     db.refresh(template)
     return template_to_response(template)
@@ -826,13 +848,26 @@ def _build_task_from_template(tmpl: TaskTemplate, today, now: datetime) -> Task:
 	is_notified=False,
     )
 
+def _should_fire_today(tmpl: TaskTemplate, today) -> bool:
+    """Check if a recurring template should generate a task today.
+    New mode: date range + frequency_days. Legacy mode: day-of-month via day_intervals."""
+    if tmpl.recurrence_start_date and tmpl.frequency_days and tmpl.frequency_days > 0:
+        if today < tmpl.recurrence_start_date:
+            return False
+        if tmpl.recurrence_end_date and today > tmpl.recurrence_end_date:
+            return False
+        delta = (today - tmpl.recurrence_start_date).days
+        return delta % tmpl.frequency_days == 0
+    if tmpl.day_intervals:
+        return today.day in parse_day_intervals(tmpl.day_intervals)
+    return False
+
 @api_router.post("/task-templates/generate-now")
 async def generate_recurring_now(db: Session = Depends(get_db),
                                   current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
     """Manually trigger recurring task generation for today."""
     now = now_sl()
     today = now.date()
-    today_day = today.day
     generated = 0
 
     templates = db.query(TaskTemplate).filter(
@@ -841,8 +876,7 @@ async def generate_recurring_now(db: Session = Depends(get_db),
     ).all()
 
     for tmpl in templates:
-        scheduled_days = parse_day_intervals(tmpl.day_intervals)
-        if not scheduled_days or today_day not in scheduled_days:
+        if not _should_fire_today(tmpl, today):
             continue
         today_start = datetime.combine(today, datetime.min.time())
         today_end = datetime.combine(today, datetime.max.time())
@@ -1677,7 +1711,6 @@ async def generate_recurring_tasks():
             db = SessionLocal()
             now = now_sl()
             today = now.date()
-            today_day = today.day
 
             templates = db.query(TaskTemplate).filter(
                 TaskTemplate.is_recurring == True,
@@ -1685,8 +1718,7 @@ async def generate_recurring_tasks():
             ).all()
 
             for tmpl in templates:
-                scheduled_days = parse_day_intervals(tmpl.day_intervals)
-                if not scheduled_days or today_day not in scheduled_days:
+                if not _should_fire_today(tmpl, today):
                     continue
                 today_start = datetime.combine(today, datetime.min.time())
                 today_end = datetime.combine(today, datetime.max.time())
