@@ -11,7 +11,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
-import api from '../lib/api';
+import api, { getErrorMessage } from '../lib/api';
 import Layout from '../components/Layout';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -78,7 +78,7 @@ export default function UsersPage() {
       setNewUser({ name: '', email: '', phone: '', password: '123456', role: 'STAFF' });
       fetchUsers();
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Failed to create user');
+      toast.error(getErrorMessage(error, 'Failed to create user'));
     } finally {
       setCreating(false);
     }
@@ -285,9 +285,22 @@ export default function UsersPage() {
                 </SelectContent>
               </Select>
             </div>
-            <p className="text-sm text-zinc-500">
-              Default password: <span className="font-mono bg-zinc-100 px-2 py-1 rounded">123456</span>
-            </p>
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={newUser.password}
+                onChange={(e) => setNewUser({...newUser, password: e.target.value})}
+                placeholder="Enter password"
+                className="rounded-xl"
+                required
+                data-testid="new-user-password"
+              />
+              <p className="text-xs text-zinc-500">
+                Minimum 6 characters
+              </p>
+            </div>
             <Button
               type="submit"
               disabled={creating}
