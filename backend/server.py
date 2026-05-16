@@ -215,6 +215,8 @@ class TaskTemplate(Base):
     recurrence_start_date = Column(Date, nullable=True)
     recurrence_end_date = Column(Date, nullable=True)
     frequency_days = Column(Integer, nullable=True)
+    weekdays = Column(JSON, nullable=True)
+    weekday_times = Column(JSON, nullable=True)
     allocated_time = Column(String(10))  # "HH:MM" in SL time
     assigned_to = Column(String(36), ForeignKey("users.id"))
     assigned_to_name = Column(String(255))
@@ -407,6 +409,8 @@ class TemplateCreate(BaseModel):
     recurrence_start_date: Optional[date] = None
     recurrence_end_date: Optional[date] = None
     frequency_days: Optional[int] = None
+    weekdays: Optional[List[int]] = None
+    weekday_times: Optional[List[dict]] = None
 
 class TemplateUpdate(BaseModel):
     title: Optional[str] = None
@@ -423,6 +427,8 @@ class TemplateUpdate(BaseModel):
     recurrence_start_date: Optional[date] = None
     recurrence_end_date: Optional[date] = None
     frequency_days: Optional[int] = None
+    weekdays: Optional[List[int]] = None
+    weekday_times: Optional[List[dict]] = None
 
 class TemplateResponse(BaseModel):
     id: str
@@ -442,6 +448,8 @@ class TemplateResponse(BaseModel):
     recurrence_start_date: Optional[date] = None
     recurrence_end_date: Optional[date] = None
     frequency_days: Optional[int] = None
+    weekdays: Optional[List[int]] = None
+    weekday_times: Optional[List[dict]] = None
     class Config:
         from_attributes = True
 
@@ -748,6 +756,8 @@ def template_to_response(t: TaskTemplate) -> dict:
         "recurrence_start_date": t.recurrence_start_date.isoformat() if t.recurrence_start_date else None,
         "recurrence_end_date": t.recurrence_end_date.isoformat() if t.recurrence_end_date else None,
         "frequency_days": t.frequency_days,
+        "weekdays": t.weekdays,
+        "weekday_times": t.weekday_times,
     }
 
 @api_router.get("/task-templates")
@@ -774,6 +784,8 @@ def create_template(template_data: TemplateCreate, db: Session = Depends(get_db)
         recurrence_start_date=template_data.recurrence_start_date,
         recurrence_end_date=template_data.recurrence_end_date,
         frequency_days=template_data.frequency_days,
+        weekdays=template_data.weekdays,
+        weekday_times=template_data.weekday_times,
     )
     db.add(template)
     db.commit()
@@ -795,7 +807,7 @@ def update_template(template_id: str, template_data: TemplateUpdate, db: Session
         if value is not None:
             setattr(template, key, value)
     # Handle nullable recurrence fields explicitly (the loop above skips None values)
-    for field in ('recurrence_start_date', 'recurrence_end_date', 'frequency_days'):
+    for field in ('recurrence_start_date', 'recurrence_end_date', 'frequency_days', 'weekdays', 'weekday_times'):
         if field in update_fields:
             setattr(template, field, update_fields[field])
     db.commit()
@@ -814,10 +826,17 @@ def delete_template(template_id: str, db: Session = Depends(get_db),
 
 def _build_task_from_template(tmpl: TaskTemplate, today, now: datetime) -> Task:
     """Helper: build a Task from a recurring template for today. All times are naive SL."""
-    # allocated_time is "HH:MM" in SL time — combine with today's date
-    if tmpl.allocated_time:
+    # Resolve time: weekday_times group overrides allocated_time
+    active_time = tmpl.allocated_time
+    if tmpl.weekday_times:
+        for group in tmpl.weekday_times:
+            if today.weekday() in group.get('weekdays', []):
+                active_time = group.get('time', tmpl.allocated_time)
+                break
+
+    if active_time:
         try:
-            hour, minute = map(int, tmpl.allocated_time.split(":"))
+            hour, minute = map(int, active_time.split(":"))
             allocated_dt = datetime.combine(today, datetime.min.time()).replace(hour=hour, minute=minute)
         except ValueError:
             allocated_dt = now
@@ -829,35 +848,48 @@ def _build_task_from_template(tmpl: TaskTemplate, today, now: datetime) -> Task:
     deadline = calculate_deadline(allocated_dt, interval, unit)
 
     date_str = today.strftime("%b %d")
-    time_str = ""
-    if tmpl.allocated_time:
+    time_display = ""
+    if active_time:
         try:
-            t = datetime.strptime(tmpl.allocated_time, "%H:%M")
-            time_str = " " + t.strftime("%I:%M %p")
+            t = datetime.strptime(active_time, "%H:%M")
+            time_display = " " + t.strftime("%I:%M %p")
         except ValueError:
             pass
-    task_title = f"{tmpl.title} ({date_str}{time_str})"
 
     return Task(
-        title=task_title, description=tmpl.description, category=tmpl.category,
+        title=f"{tmpl.title} ({date_str}{time_display})",
+        description=tmpl.description, category=tmpl.category,
         priority=(tmpl.priority or "MEDIUM").upper(), status="PENDING",
         task_type="RECURRING", time_interval=interval, time_unit=unit,
         allocated_datetime=allocated_dt, deadline=deadline,
         assigned_to=tmpl.assigned_to, assigned_to_name=tmpl.assigned_to_name,
         created_by=tmpl.created_by, created_by_name="System", template_id=tmpl.id,
-	is_notified=False,
+        is_notified=False,
     )
 
 def _should_fire_today(tmpl: TaskTemplate, today) -> bool:
     """Check if a recurring template should generate a task today.
-    New mode: date range + frequency_days. Legacy mode: day-of-month via day_intervals."""
-    if tmpl.recurrence_start_date and tmpl.frequency_days and tmpl.frequency_days > 0:
+    Priority: weekday_times > weekdays > frequency_days > day_intervals (legacy)."""
+    if tmpl.recurrence_start_date:
         if today < tmpl.recurrence_start_date:
             return False
         if tmpl.recurrence_end_date and today > tmpl.recurrence_end_date:
             return False
-        delta = (today - tmpl.recurrence_start_date).days
-        return delta % tmpl.frequency_days == 0
+        # Multi-time weekday groups: fires if today matches any group's weekdays
+        if tmpl.weekday_times:
+            for group in tmpl.weekday_times:
+                if today.weekday() in group.get('weekdays', []):
+                    return True
+            return False
+        # Single weekday list
+        if tmpl.weekdays:
+            return today.weekday() in tmpl.weekdays
+        # Frequency mode: fires every N days from start date
+        if tmpl.frequency_days and tmpl.frequency_days > 0:
+            delta = (today - tmpl.recurrence_start_date).days
+            return delta % tmpl.frequency_days == 0
+        return False
+    # Legacy mode: day-of-month
     if tmpl.day_intervals:
         return today.day in parse_day_intervals(tmpl.day_intervals)
     return False
