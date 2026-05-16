@@ -55,6 +55,9 @@ const DEFAULT_FORM = {
   recurrence_end_date: null,
   frequency_days: 1,
   is_infinite: true,
+  weekdays: [],
+  schedule_mode: 'frequency',
+  weekday_times: [{ weekdays: [], time: '09:00' }],
 };
 
 export default function TaskLibraryPage() {
@@ -135,7 +138,18 @@ export default function TaskLibraryPage() {
         ...(formData.is_recurring && {
           recurrence_start_date: formData.recurrence_start_date ? format(formData.recurrence_start_date, 'yyyy-MM-dd') : null,
           recurrence_end_date: (!formData.is_infinite && formData.recurrence_end_date) ? format(formData.recurrence_end_date, 'yyyy-MM-dd') : null,
-          frequency_days: parseInt(formData.frequency_days) || 1,
+          ...(formData.schedule_mode === 'weekday_groups'
+            ? {
+                weekday_times: formData.weekday_times.filter(g => g.weekdays.length > 0),
+                weekdays: null,
+                frequency_days: null,
+              }
+            : {
+                weekday_times: null,
+                weekdays: formData.weekdays.length > 0 ? formData.weekdays : null,
+                frequency_days: parseInt(formData.frequency_days) || 1,
+              }
+          ),
         }),
       };
       if (editingTemplate) {
@@ -172,6 +186,11 @@ export default function TaskLibraryPage() {
       recurrence_end_date: template.recurrence_end_date ? parseISO(template.recurrence_end_date) : null,
       frequency_days: template.frequency_days || 1,
       is_infinite: template.recurrence_end_date == null,
+      weekdays: template.weekdays || [],
+      schedule_mode: (template.weekday_times && template.weekday_times.length > 0) ? 'weekday_groups' : 'frequency',
+      weekday_times: (template.weekday_times && template.weekday_times.length > 0)
+        ? template.weekday_times
+        : [{ weekdays: [], time: '09:00' }],
     });
     setShowCreate(true);
   };
@@ -504,49 +523,150 @@ export default function TaskLibraryPage() {
                   )}
                 </div>
 
-                {/* Frequency */}
-                <div className="space-y-1">
-                  <Label className="flex items-center gap-1">
-                    <Repeat className="h-3.5 w-3.5" />
-                    Repeat every
-                  </Label>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      type="number"
-                      min="1"
-                      max="365"
-                      value={formData.frequency_days}
-                      onChange={(e) => setFormData({ ...formData, frequency_days: parseInt(e.target.value) || 1 })}
-                      className="w-24 rounded-xl bg-white"
-                      data-testid="frequency-days-input"
-                    />
-                    <span className="text-sm text-blue-700">
-                      {formData.frequency_days === 1 ? 'day (daily)' : formData.frequency_days === 7 ? 'days (weekly)' : 'days'}
-                    </span>
-                  </div>
+                {/* Schedule Mode Toggle */}
+                <div className="flex gap-2">
+                  <button type="button"
+                    onClick={() => setFormData({ ...formData, schedule_mode: 'frequency' })}
+                    className={`flex-1 py-2 rounded-xl text-xs font-medium border transition-colors ${
+                      formData.schedule_mode === 'frequency'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-zinc-600 border-zinc-200'
+                    }`}
+                    data-testid="mode-frequency-btn"
+                  >
+                    Every N days
+                  </button>
+                  <button type="button"
+                    onClick={() => setFormData({ ...formData, schedule_mode: 'weekday_groups' })}
+                    className={`flex-1 py-2 rounded-xl text-xs font-medium border transition-colors ${
+                      formData.schedule_mode === 'weekday_groups'
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'bg-white text-zinc-600 border-zinc-200'
+                    }`}
+                    data-testid="mode-weekday-btn"
+                  >
+                    By weekday
+                  </button>
                 </div>
 
-                {/* Task Time */}
-                <div className="space-y-1">
-                  <Label className="flex items-center gap-1">
-                    <Clock className="h-3.5 w-3.5" />
-                    Task Time
-                  </Label>
-                  <Input
-                    type="time"
-                    value={formData.allocated_time}
-                    onChange={(e) => setFormData({ ...formData, allocated_time: e.target.value })}
-                    className="rounded-xl bg-white"
-                    data-testid="allocated-time-input"
-                  />
-                </div>
+                {/* Frequency mode */}
+                {formData.schedule_mode === 'frequency' && (
+                  <>
+                    <div className="space-y-1">
+                      <Label className="flex items-center gap-1">
+                        <Repeat className="h-3.5 w-3.5" />
+                        Repeat every
+                      </Label>
+                      <div className="flex items-center gap-2">
+                        <Input
+                          type="number"
+                          min="1"
+                          max="365"
+                          value={formData.frequency_days}
+                          onChange={(e) => setFormData({ ...formData, frequency_days: parseInt(e.target.value) || 1 })}
+                          className="w-24 rounded-xl bg-white"
+                          data-testid="frequency-days-input"
+                        />
+                        <span className="text-sm text-blue-700">
+                          {formData.frequency_days === 1 ? 'day (daily)' : formData.frequency_days === 7 ? 'days (weekly)' : 'days'}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5" />
+                        Task Time
+                      </Label>
+                      <Input
+                        type="time"
+                        value={formData.allocated_time}
+                        onChange={(e) => setFormData({ ...formData, allocated_time: e.target.value })}
+                        className="rounded-xl bg-white"
+                        data-testid="allocated-time-input"
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Weekday groups mode */}
+                {formData.schedule_mode === 'weekday_groups' && (
+                  <div className="space-y-2">
+                    {formData.weekday_times.map((group, gi) => (
+                      <div key={gi} className="p-2 bg-white rounded-xl border border-zinc-200 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs text-zinc-500 font-medium">Group {gi + 1}</span>
+                          {formData.weekday_times.length > 1 && (
+                            <button type="button"
+                              onClick={() => setFormData({ ...formData, weekday_times: formData.weekday_times.filter((_,i) => i !== gi) })}
+                              className="text-xs text-red-400 hover:text-red-600"
+                              data-testid={`remove-group-${gi}`}
+                            >Remove</button>
+                          )}
+                        </div>
+                        <div className="flex gap-1 flex-wrap">
+                          {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((day, di) => (
+                            <button key={di} type="button"
+                              onClick={() => {
+                                const newGroups = [...formData.weekday_times];
+                                const days = newGroups[gi].weekdays.includes(di)
+                                  ? newGroups[gi].weekdays.filter(d => d !== di)
+                                  : [...newGroups[gi].weekdays, di];
+                                newGroups[gi] = { ...newGroups[gi], weekdays: days };
+                                setFormData({ ...formData, weekday_times: newGroups });
+                              }}
+                              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                                group.weekdays.includes(di)
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-white text-zinc-600 border border-zinc-200 hover:border-blue-400'
+                              }`}
+                              data-testid={`group-${gi}-day-${di}`}
+                            >{day}</button>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <Clock className="h-3.5 w-3.5 text-zinc-400" />
+                          <Input type="time" value={group.time}
+                            onChange={(e) => {
+                              const newGroups = [...formData.weekday_times];
+                              newGroups[gi] = { ...newGroups[gi], time: e.target.value };
+                              setFormData({ ...formData, weekday_times: newGroups });
+                            }}
+                            className="rounded-lg bg-white h-9 w-32"
+                            data-testid={`group-${gi}-time`}
+                          />
+                          <span className="text-xs text-zinc-400">
+                            {group.weekdays.length > 0
+                              ? ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].filter((_,i) => group.weekdays.includes(i)).join(', ')
+                              : 'No days selected'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                    <button type="button"
+                      onClick={() => setFormData({ ...formData, weekday_times: [...formData.weekday_times, { weekdays: [], time: '09:00' }] })}
+                      className="w-full py-2 rounded-xl text-xs text-blue-600 border border-dashed border-blue-300 hover:bg-blue-50"
+                      data-testid="add-group-btn"
+                    >+ Add another time group</button>
+                  </div>
+                )}
 
                 {/* Preview */}
-                {formData.recurrence_start_date && formData.frequency_days && (
-                  <p className="text-xs text-blue-600 bg-blue-100 p-2 rounded-lg">
-                    Starting {format(formData.recurrence_start_date, 'MMM d, yyyy')}, runs every {formData.frequency_days} day{formData.frequency_days !== 1 ? 's' : ''}
-                    {formData.is_infinite ? ', forever' : formData.recurrence_end_date ? ` until ${format(formData.recurrence_end_date, 'MMM d, yyyy')}` : ''}
-                  </p>
+                {formData.recurrence_start_date && (
+                  formData.schedule_mode === 'weekday_groups'
+                    ? formData.weekday_times.some(g => g.weekdays.length > 0) && (
+                        <p className="text-xs text-blue-600 bg-blue-100 p-2 rounded-lg">
+                          {formData.weekday_times.filter(g => g.weekdays.length > 0).map((g) =>
+                            `${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].filter((_,i) => g.weekdays.includes(i)).join('/')} at ${g.time}`
+                          ).join(' · ')}
+                          {formData.is_infinite ? ', forever' : formData.recurrence_end_date ? ` until ${format(formData.recurrence_end_date, 'MMM d, yyyy')}` : ''}
+                        </p>
+                      )
+                    : formData.frequency_days && (
+                        <p className="text-xs text-blue-600 bg-blue-100 p-2 rounded-lg">
+                          Every {formData.frequency_days} day{formData.frequency_days !== 1 ? 's' : ''} from {format(formData.recurrence_start_date, 'MMM d, yyyy')}
+                          {formData.is_infinite ? ', forever' : formData.recurrence_end_date ? ` until ${format(formData.recurrence_end_date, 'MMM d, yyyy')}` : ''}
+                        </p>
+                      )
                 )}
               </div>
             )}
@@ -618,10 +738,23 @@ function TemplateCard({ template, onEdit, onDelete, onToggle }) {
                     Days: {template.day_intervals}
                   </span>
                 ) : null}
-                {template.frequency_days && (
+                {template.weekday_times && template.weekday_times.length > 0 ? (
+                  <span className="flex items-center gap-1 flex-wrap">
+                    <Clock className="h-3 w-3" />
+                    {template.weekday_times.map((g, i) => (
+                      <span key={i}>
+                        {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].filter((_,j) => g.weekdays.includes(j)).join('/')}
+                        {' '}{g.time}
+                        {i < template.weekday_times.length - 1 ? ' · ' : ''}
+                      </span>
+                    ))}
+                  </span>
+                ) : template.weekdays && template.weekdays.length > 0 ? (
+                  <span>{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].filter((_,i) => template.weekdays.includes(i)).join(', ')}</span>
+                ) : template.frequency_days ? (
                   <span>Every {template.frequency_days}d</span>
-                )}
-                {template.allocated_time && (
+                ) : null}
+                {!template.weekday_times?.length && template.allocated_time && (
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
                     {template.allocated_time}

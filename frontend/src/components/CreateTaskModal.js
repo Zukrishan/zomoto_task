@@ -73,6 +73,9 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
   const [recurrenceEndDate, setRecurrenceEndDate] = useState(null);
   const [frequencyDays, setFrequencyDays] = useState(1);
   const [isInfinite, setIsInfinite] = useState(true);
+  const [weekdays, setWeekdays] = useState([]);
+  const [scheduleMode, setScheduleMode] = useState('frequency'); // 'frequency' | 'weekday_groups'
+  const [weekdayTimes, setWeekdayTimes] = useState([{ weekdays: [], time: '09:00' }]);
 
   const { register, handleSubmit, setValue, watch, reset, formState: { errors } } = useForm({
     resolver: zodResolver(taskSchema),
@@ -167,8 +170,12 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
         toast.error('Start date is required for recurring tasks');
         return;
       }
-      if (!frequencyDays || frequencyDays < 1) {
+      if (scheduleMode === 'frequency' && (!frequencyDays || frequencyDays < 1)) {
         toast.error('Frequency must be at least 1 day');
+        return;
+      }
+      if (scheduleMode === 'weekday_groups' && !weekdayTimes.some(g => g.weekdays.length > 0)) {
+        toast.error('Select at least one day in a time group');
         return;
       }
     }
@@ -196,7 +203,15 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
         taskData.recurrence_type = 'DATE_RANGE';
         taskData.recurrence_start_date = recurrenceStartDate ? format(recurrenceStartDate, 'yyyy-MM-dd') : null;
         taskData.recurrence_end_date = (!isInfinite && recurrenceEndDate) ? format(recurrenceEndDate, 'yyyy-MM-dd') : null;
-        taskData.frequency_days = parseInt(frequencyDays) || 1;
+        if (scheduleMode === 'weekday_groups') {
+          taskData.weekday_times = weekdayTimes.filter(g => g.weekdays.length > 0);
+          taskData.weekdays = null;
+          taskData.frequency_days = null;
+        } else {
+          taskData.weekday_times = null;
+          taskData.weekdays = weekdays.length > 0 ? weekdays : null;
+          taskData.frequency_days = parseInt(frequencyDays) || 1;
+        }
         taskData.recurrence_intervals = [];
       }
       
@@ -229,6 +244,9 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
     setRecurrenceEndDate(null);
     setFrequencyDays(1);
     setIsInfinite(true);
+    setWeekdays([]);
+    setScheduleMode('frequency');
+    setWeekdayTimes([{ weekdays: [], time: '09:00' }]);
     setShowTemplateList(false);
     onClose();
   };
@@ -360,30 +378,155 @@ export default function CreateTaskModal({ open, onClose, onSuccess }) {
                 )}
               </div>
 
-              {/* Frequency */}
-              <div className="space-y-1">
-                <Label className="text-sm">Repeat every</Label>
-                <div className="flex items-center gap-2">
-                  <Input
-                    type="number"
-                    min="1"
-                    max="365"
-                    value={frequencyDays}
-                    onChange={(e) => setFrequencyDays(parseInt(e.target.value) || 1)}
-                    className="w-24 rounded-xl bg-white"
-                    data-testid="frequency-days-input"
-                  />
-                  <span className="text-sm text-blue-700">
-                    {frequencyDays === 1 ? 'day (daily)' : frequencyDays === 7 ? 'days (weekly)' : 'days'}
-                  </span>
-                </div>
+              {/* Schedule Mode Toggle */}
+              <div className="flex gap-2">
+                <button type="button"
+                  onClick={() => setScheduleMode('frequency')}
+                  className={`flex-1 py-2 rounded-xl text-xs font-medium border transition-colors ${
+                    scheduleMode === 'frequency'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-zinc-600 border-zinc-200'
+                  }`}
+                  data-testid="mode-frequency-btn"
+                >Every N days</button>
+                <button type="button"
+                  onClick={() => setScheduleMode('weekday_groups')}
+                  className={`flex-1 py-2 rounded-xl text-xs font-medium border transition-colors ${
+                    scheduleMode === 'weekday_groups'
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-white text-zinc-600 border-zinc-200'
+                  }`}
+                  data-testid="mode-weekday-btn"
+                >By weekday</button>
               </div>
 
-              {/* Preview */}
-              {recurrenceStartDate && frequencyDays && (
-                <div className="text-xs text-blue-700 bg-blue-100 p-2 rounded-lg">
-                  Starting {format(recurrenceStartDate, 'MMM d, yyyy')}, runs every {frequencyDays} day{frequencyDays !== 1 ? 's' : ''}
-                  {isInfinite ? ', forever' : recurrenceEndDate ? ` until ${format(recurrenceEndDate, 'MMM d, yyyy')}` : ''}
+              {/* Frequency mode */}
+              {scheduleMode === 'frequency' && (
+                <>
+                  {/* Frequency */}
+                  <div className="space-y-1">
+                    <Label className="text-sm">Repeat every</Label>
+                    <div className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="1"
+                        max="365"
+                        value={frequencyDays}
+                        onChange={(e) => setFrequencyDays(parseInt(e.target.value) || 1)}
+                        className="w-24 rounded-xl bg-white"
+                        data-testid="frequency-days-input"
+                      />
+                      <span className="text-sm text-blue-700">
+                        {frequencyDays === 1 ? 'day (daily)' : frequencyDays === 7 ? 'days (weekly)' : 'days'}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Weekday Selector */}
+                  <div className="space-y-1">
+                    <Label className="text-sm">Repeat on (optional)</Label>
+                    <div className="flex gap-1 flex-wrap">
+                      {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((day, i) => (
+                        <button key={i} type="button"
+                          onClick={() => {
+                            const days = weekdays.includes(i)
+                              ? weekdays.filter(d => d !== i)
+                              : [...weekdays, i];
+                            setWeekdays(days);
+                          }}
+                          className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                            weekdays.includes(i)
+                              ? 'bg-blue-600 text-white'
+                              : 'bg-white text-zinc-600 border border-zinc-200 hover:border-blue-400'
+                          }`}
+                          data-testid={`weekday-btn-${i}`}
+                        >{day}</button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-zinc-400">
+                      {weekdays.length === 0 ? 'No filter — uses frequency above' : `${weekdays.length} day(s) selected — frequency ignored`}
+                    </p>
+                  </div>
+
+                  {/* Preview */}
+                  {recurrenceStartDate && (weekdays.length > 0 || frequencyDays) && (
+                    <div className="text-xs text-blue-700 bg-blue-100 p-2 rounded-lg">
+                      {weekdays.length > 0
+                        ? `Every ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].filter((_,i) => weekdays.includes(i)).join(', ')}`
+                        : `Starting ${format(recurrenceStartDate, 'MMM d, yyyy')}, runs every ${frequencyDays} day${frequencyDays !== 1 ? 's' : ''}`}
+                      {isInfinite ? ', forever' : recurrenceEndDate ? ` until ${format(recurrenceEndDate, 'MMM d, yyyy')}` : ''}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Weekday groups mode */}
+              {scheduleMode === 'weekday_groups' && (
+                <div className="space-y-2">
+                  {weekdayTimes.map((group, gi) => (
+                    <div key={gi} className="p-2 bg-white rounded-xl border border-zinc-200 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-zinc-500 font-medium">Group {gi + 1}</span>
+                        {weekdayTimes.length > 1 && (
+                          <button type="button"
+                            onClick={() => setWeekdayTimes(weekdayTimes.filter((_,i) => i !== gi))}
+                            className="text-xs text-red-400 hover:text-red-600"
+                            data-testid={`remove-group-${gi}`}
+                          >Remove</button>
+                        )}
+                      </div>
+                      <div className="flex gap-1 flex-wrap">
+                        {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map((day, di) => (
+                          <button key={di} type="button"
+                            onClick={() => {
+                              const newGroups = [...weekdayTimes];
+                              const days = newGroups[gi].weekdays.includes(di)
+                                ? newGroups[gi].weekdays.filter(d => d !== di)
+                                : [...newGroups[gi].weekdays, di];
+                              newGroups[gi] = { ...newGroups[gi], weekdays: days };
+                              setWeekdayTimes(newGroups);
+                            }}
+                            className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                              group.weekdays.includes(di)
+                                ? 'bg-blue-600 text-white'
+                                : 'bg-white text-zinc-600 border border-zinc-200 hover:border-blue-400'
+                            }`}
+                            data-testid={`group-${gi}-day-${di}`}
+                          >{day}</button>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Clock className="h-3.5 w-3.5 text-zinc-400" />
+                        <Input type="time" value={group.time}
+                          onChange={(e) => {
+                            const newGroups = [...weekdayTimes];
+                            newGroups[gi] = { ...newGroups[gi], time: e.target.value };
+                            setWeekdayTimes(newGroups);
+                          }}
+                          className="rounded-lg bg-white h-9 w-32"
+                          data-testid={`group-${gi}-time`}
+                        />
+                        <span className="text-xs text-zinc-400">
+                          {group.weekdays.length > 0
+                            ? ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].filter((_,i) => group.weekdays.includes(i)).join(', ')
+                            : 'No days selected'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                  <button type="button"
+                    onClick={() => setWeekdayTimes([...weekdayTimes, { weekdays: [], time: '09:00' }])}
+                    className="w-full py-2 rounded-xl text-xs text-blue-600 border border-dashed border-blue-300 hover:bg-blue-50"
+                    data-testid="add-group-btn"
+                  >+ Add another time group</button>
+                  {recurrenceStartDate && weekdayTimes.some(g => g.weekdays.length > 0) && (
+                    <div className="text-xs text-blue-700 bg-blue-100 p-2 rounded-lg">
+                      {weekdayTimes.filter(g => g.weekdays.length > 0).map((g) =>
+                        `${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].filter((_,i) => g.weekdays.includes(i)).join('/')} at ${g.time}`
+                      ).join(' · ')}
+                      {isInfinite ? ', forever' : recurrenceEndDate ? ` until ${format(recurrenceEndDate, 'MMM d, yyyy')}` : ''}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
