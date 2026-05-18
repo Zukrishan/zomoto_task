@@ -7,7 +7,8 @@ import {
   LogOut,
   Menu,
   X,
-  Tags
+  Tags,
+  BarChart3
 } from 'lucide-react';
 import { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
@@ -30,6 +31,7 @@ export default function Layout({ children }) {
     { to: '/users', icon: Users, label: 'Team', show: isOwner },
     { to: '/task-library', icon: BookOpen, label: 'Library', show: isOwner || isManager },
     { to: '/categories', icon: Tags, label: 'Categories', show: isOwner || isManager },
+    { to: '/reports', icon: BarChart3, label: 'Reports', show: isOwner || isManager },
   ];
 
   const NavItem = ({ to, icon: Icon, label }) => (
@@ -53,9 +55,9 @@ export default function Layout({ children }) {
   return (
     <div className="min-h-screen bg-[#F4F4F5]">
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex md:flex-col md:w-64 md:fixed md:inset-y-0 bg-white border-r border-zinc-200 z-30">
+      <aside className="hidden md:flex md:flex-col md:w-64 md:fixed md:inset-y-0 bg-white border-r border-zinc-200 z-40 overflow-visible">
         {/* Logo */}
-        <div className="p-6 border-b border-zinc-100 flex items-center justify-between">
+        <div className="p-6 border-b border-zinc-100 flex items-center justify-between relative z-[110] overflow-visible">
           <img 
             src="https://customer-assets.emergentagent.com/job_task-tracker-735/artifacts/kinqp8ij_Zomoto_Logo-1.png"
             alt="Zomoto Logo"
@@ -97,13 +99,13 @@ export default function Layout({ children }) {
       </aside>
 
       {/* Mobile Header */}
-      <header className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-zinc-200 z-30 flex items-center justify-between px-4 safe-area-top">
+      <header className="md:hidden fixed top-0 left-0 right-0 h-16 bg-white border-b border-zinc-200 z-[110] flex items-center justify-between px-4 safe-area-top">
         <img 
           src="https://customer-assets.emergentagent.com/job_task-tracker-735/artifacts/kinqp8ij_Zomoto_Logo-1.png"
           alt="Zomoto Logo"
           className="h-8 w-auto"
         />
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 relative z-[110]">
           <NotificationBell />
           <Button
             variant="ghost"
@@ -165,7 +167,7 @@ export default function Layout({ children }) {
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-zinc-200 z-30 safe-area-bottom">
         <div className="flex justify-around py-2">
-          {navItems.filter(item => item.show).slice(0, 4).map(({ to, icon: Icon, label }) => (
+          {navItems.filter(item => item.show).slice(0, 5).map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}

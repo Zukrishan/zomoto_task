@@ -1,0 +1,98 @@
+{
+  "summary": "Comprehensive testing of new recurring task and late completion features. All 14 backend tests passed (100%). Frontend testing verified: Library page with recurring rules section, Generate Now button, Add Task form with recurring toggle/day intervals/allocated time, Tasks page showing Late badge, time allowed, started time, and recurring task icon. All features working correctly.",
+  
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Add Task Template Modal",
+        "issues": ["Minor: Missing aria-describedby for DialogContent (console warning only, not affecting functionality)"]
+      }
+    ]
+  },
+
+  "passed_tests": [
+    "Backend: POST /api/task-templates creates recurring template with is_recurring=true, day_intervals, allocated_time - SUCCESS",
+    "Backend: PUT /api/task-templates/{id} updates template including is_active toggle - SUCCESS",
+    "Backend: POST /api/task-templates/generate-now creates tasks from active recurring templates - SUCCESS",
+    "Backend: Generated task has title format 'Name (Mon DD HH:MM AM/PM)' and task_type=RECURRING - SUCCESS",
+    "Backend: POST /api/tasks/{id}/complete allows completion from NOT_COMPLETED status - SUCCESS",
+    "Backend: Late completion sets is_late=true and calculates actual_time_taken - SUCCESS",
+    "Backend: GET /api/tasks returns tasks with is_late and actual_time_taken fields - SUCCESS",
+    "Backend: Staff cannot create templates (403) - SUCCESS",
+    "Backend: Staff cannot trigger generate-now (403) - SUCCESS",
+    "Backend: Cannot complete from PENDING status (400) - SUCCESS",
+    "Frontend: Library page shows Recurring Rules section with Active badge - SUCCESS",
+    "Frontend: Library page shows day intervals and allocated time - SUCCESS",
+    "Frontend: Library page Generate Now button triggers task generation - SUCCESS",
+    "Frontend: Add Task form has recurring toggle - SUCCESS",
+    "Frontend: Add Task form shows day intervals input when recurring enabled - SUCCESS",
+    "Frontend: Add Task form shows allocated time picker when recurring enabled - SUCCESS",
+    "Frontend: Tasks page shows recurring task with correct title format - SUCCESS",
+    "Frontend: Task card shows 'Allowed: X min' display - SUCCESS",
+    "Frontend: Task card shows 'Late' badge when task.is_late is true - SUCCESS",
+    "Frontend: Task card shows 'Started:' time - SUCCESS",
+    "Frontend: Staff can view Start button for pending assigned tasks - SUCCESS",
+    "Frontend: Staff can upload proof and see View Proof button - SUCCESS"
+  ],
+
+  "test_report_links": [
+    "/app/backend/tests/test_recurring_late_completion.py",
+    "/app/test_reports/pytest/pytest_results_recurring.xml"
+  ],
+
+  "action_items": [],
+
+  "critical_code_review_comments": [],
+
+  "updated_files": [
+    "/app/backend/tests/test_recurring_late_completion.py"
+  ],
+
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "100%"
+  },
+
+  "test_credentials": {
+    "Owner": "owner@zomoto.lk / 123456",
+    "Manager": "manager@zomoto.lk / 123456",
+    "Staff": "staff@zomoto.lk / 123456"
+  },
+
+  "seed_data_creation": "Test templates and tasks created during backend tests with TEST_ prefix. Templates cleaned up after tests.",
+
+  "retest_needed": false,
+
+  "should_main_agent_self_test": false,
+
+  "context_for_next_testing_agent": "All recurring task and late completion features fully tested and working. Key features verified: (1) TaskTemplate CRUD with is_recurring, is_active, day_intervals, allocated_time, assigned_to fields. (2) Generate-now endpoint creates tasks with RECURRING type and title format 'Name (Mon DD HH:MM AM/PM)'. (3) Tasks have is_late, actual_time_taken, template_id fields. (4) Complete endpoint accepts NOT_COMPLETED status for late completion. (5) Library page shows Recurring Rules section with badges and controls. (6) TaskCard shows Late badge, Allowed time, Started time, recurring icon.",
+
+  "features_verified": {
+    "recurring_templates": {
+      "create_template": "Working - creates with is_recurring, day_intervals, allocated_time",
+      "update_template": "Working - can toggle is_active, update fields",
+      "generate_now": "Working - creates tasks for today matching day_intervals",
+      "task_title_format": "Working - 'Name (Mon DD HH:MM AM/PM)'"
+    },
+    "late_completion": {
+      "complete_from_not_completed": "Working - POST /api/tasks/{id}/complete accepts NOT_COMPLETED",
+      "is_late_flag": "Working - set to true when deadline passed",
+      "actual_time_taken": "Working - calculated from started_at to completed_at"
+    },
+    "frontend_displays": {
+      "recurring_rules_section": "Working - shows Active badge, day intervals, time",
+      "generate_now_button": "Working - triggers task generation",
+      "add_task_recurring_toggle": "Working - shows day intervals and time inputs",
+      "late_badge": "Working - shows orange 'Late' badge on task cards",
+      "time_allowed": "Working - shows 'Allowed: X min'",
+      "started_time": "Working - shows 'Started: HH:MM PM'"
+    }
+  }
+}

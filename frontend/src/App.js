@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { AuthProvider, useAuth } from "./context/AuthContext";
+import { WebSocketProvider } from "./context/WebSocketContext";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import TasksPage from "./pages/TasksPage";
@@ -8,6 +9,7 @@ import TaskDetailPage from "./pages/TaskDetailPage";
 import UsersPage from "./pages/UsersPage";
 import TaskLibraryPage from "./pages/TaskLibraryPage";
 import CategoriesPage from "./pages/CategoriesPage";
+import ReportsPage from "./pages/ReportsPage";
 import "./App.css";
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
@@ -68,6 +70,11 @@ function AppRoutes() {
           <CategoriesPage />
         </ProtectedRoute>
       } />
+      <Route path="/reports" element={
+        <ProtectedRoute allowedRoles={["OWNER", "MANAGER"]}>
+          <ReportsPage />
+        </ProtectedRoute>
+      } />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
@@ -78,14 +85,16 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
-        <Toaster 
-          position="top-center" 
-          richColors 
-          toastOptions={{
-            style: { fontFamily: '"DM Sans", sans-serif' }
-          }}
-        />
+        <WebSocketProvider>
+          <AppRoutes />
+          <Toaster 
+            position="top-center" 
+            richColors 
+            toastOptions={{
+              style: { fontFamily: '"DM Sans", sans-serif' }
+            }}
+          />
+        </WebSocketProvider>
       </AuthProvider>
     </BrowserRouter>
   );

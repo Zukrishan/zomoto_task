@@ -1,33 +1,65 @@
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, status, UploadFile, File, Form, WebSocket, WebSocketDisconnect
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, String, Text, Boolean, DateTime, Integer, ForeignKey, Enum as SQLEnum
+from sqlalchemy import create_engine, Column, String, Text, DateTime, Boolean, Integer, ForeignKey, Enum as SQLEnum, JSON
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker, Session, relationship
-from contextlib import asynccontextmanager
+from sqlalchemy.orm import sessionmaker, relationship, Session
+from sqlalchemy.pool import QueuePool
 import os
 import logging
 from pathlib import Path
 from pydantic import BaseModel, Field, EmailStr
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import uuid
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone, timedelta, date
 from passlib.context import CryptContext
 from jose import JWTError, jwt
 import httpx
 import aiofiles
 from PIL import Image
-import io
+import asyncio
+import json
 import enum
+from zoneinfo import ZoneInfo
+
+# Sri Lanka timezone (Asia/Colombo = UTC+5:30)
+SL_TZ = ZoneInfo("Asia/Colombo")
+
+def now_sl():
+    """Get current time in Sri Lanka timezone, returned as naive datetime for MySQL storage."""
+    return datetime.now(SL_TZ).replace(tzinfo=None)
+
+def to_sl_naive(dt) -> datetime:
+    """
+    Convert any datetime to a naive SL datetime suitable for MySQL storage.
+    - If dt is timezone-aware (e.g. UTC+00:00 from frontend), convert to SL time then strip tz.
+    - If dt is already naive, assume it is already in SL time and return as-is.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        # Convert from whatever timezone (typically UTC from frontend) to SL, then strip
+        return dt.astimezone(SL_TZ).replace(tzinfo=None)
+    # Already naive, assume SL time
+    return dt
+
+def to_sl_iso(dt):
+    """Convert a naive datetime (assumed SL time) to ISO string."""
+    if dt is None:
+        return None
+    return dt.isoformat()
+
+import subprocess
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
-# MySQL connection
-MYSQL_URL = os.environ.get('MYSQL_URL', 'mysql+pymysql://root@localhost/zomoto_tasks')
-engine = create_engine(MYSQL_URL, pool_pre_ping=True, pool_recycle=3600)
+
+# MySQL Configuration
+MYSQL_URL = os.environ.get('MYSQL_URL', 'mysql+pymysql://root:Qwerty123@localhost/zomoto_tasks?unix_socket=/run/mysqld/mysqld.sock')
+engine = create_engine(MYSQL_URL, pool_size=10, max_overflow=20, pool_pre_ping=True)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
@@ -36,188 +68,179 @@ SECRET_KEY = os.environ.get('JWT_SECRET', 'zomoto-tasks-secret-key-2024')
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_HOURS = 24
 
+# notify.lk Configuration
+NOTIFY_LK_USER_ID = os.environ.get('NOTIFY_LK_USER_ID', '28528')
+NOTIFY_LK_API_KEY = os.environ.get('NOTIFY_LK_API_KEY', 'JeP7ACSaYTSwOY5eCl6S')
+NOTIFY_LK_SENDER_ID = os.environ.get('NOTIFY_LK_SENDER_ID', 'Zeeha HLD')
+
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 # Security
 security = HTTPBearer()
 
+# Create the main app
+app = FastAPI(title="Zomoto Tasks API", version="3.0.0")
+api_router = APIRouter(prefix="/api")
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-# ============== ENUMS ==============
-
-class UserRoleEnum(str, enum.Enum):
+# ===================== ENUMS =====================
+class UserRole(str, enum.Enum):
     OWNER = "OWNER"
     MANAGER = "MANAGER"
     STAFF = "STAFF"
 
-class TaskStatusEnum(str, enum.Enum):
-    CREATED = "CREATED"
-    ASSIGNED = "ASSIGNED"
+class UserStatus(str, enum.Enum):
+    ACTIVE = "ACTIVE"
+    INACTIVE = "INACTIVE"
+
+class TaskStatus(str, enum.Enum):
+    PENDING = "PENDING"
     IN_PROGRESS = "IN_PROGRESS"
     COMPLETED = "COMPLETED"
+    NOT_COMPLETED = "NOT_COMPLETED"
     VERIFIED = "VERIFIED"
 
-class TaskPriorityEnum(str, enum.Enum):
+class TaskPriority(str, enum.Enum):
     HIGH = "HIGH"
     MEDIUM = "MEDIUM"
     LOW = "LOW"
 
-# ============== SQLAlchemy MODELS ==============
+class TaskType(str, enum.Enum):
+    INSTANT = "INSTANT"
+    RECURRING = "RECURRING"
 
+class TimeUnit(str, enum.Enum):
+    MINUTES = "MINUTES"
+    HOURS = "HOURS"
+
+# ===================== SQLAlchemy MODELS =====================
 class User(Base):
     __tablename__ = "users"
-    
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String(255), nullable=False)
     email = Column(String(255), unique=True, nullable=False, index=True)
     phone = Column(String(50))
-    password = Column(String(255), nullable=False)
-    role = Column(String(20), nullable=False, default="STAFF")
-    status = Column(String(20), nullable=False, default="ACTIVE")
-    employee_id = Column(String(50))
-    salary_type = Column(String(50))
-    basic_salary = Column(Integer)
-    created_by = Column(String(36))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    role = Column(String(20), default="STAFF")
+    status = Column(String(20), default="ACTIVE")
+    hashed_password = Column(String(255), nullable=False)
+    created_at = Column(DateTime, default=now_sl)
+    updated_at = Column(DateTime, default=now_sl, onupdate=now_sl)
 
 class Category(Base):
     __tablename__ = "categories"
-    
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String(100), nullable=False)
-    color = Column(String(20), default="#6B7280")
-    is_active = Column(Boolean, default=True)
-    created_by = Column(String(36))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    name = Column(String(255), nullable=False)
+    color = Column(String(50), default="#6B7280")
+    created_at = Column(DateTime, default=now_sl)
 
 class TaskTemplate(Base):
     __tablename__ = "task_templates"
-    
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String(255), nullable=False)
-    name_lower = Column(String(255), index=True)
-    default_category = Column(String(100))
-    default_priority = Column(String(20))
-    is_active = Column(Boolean, default=True)
-    created_by = Column(String(36))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-class Task(Base):
-    __tablename__ = "tasks"
-    
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title = Column(String(255), nullable=False)
     description = Column(Text)
-    category = Column(String(100))
+    category = Column(String(255))
     priority = Column(String(20), default="MEDIUM")
-    due_date = Column(DateTime)
-    status = Column(String(20), default="CREATED")
-    created_by = Column(String(36), nullable=False)
-    created_by_name = Column(String(255))
-    assigned_to = Column(String(36), index=True)
+    time_interval = Column(Integer, default=30)
+    time_unit = Column(String(20), default="MINUTES")
+    is_recurring = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    day_intervals = Column(String(255))
+    allocated_time = Column(String(10))  # "HH:MM" in SL time
+    assigned_to = Column(String(36), ForeignKey("users.id"))
     assigned_to_name = Column(String(255))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_by = Column(String(36), ForeignKey("users.id"))
+    created_at = Column(DateTime, default=now_sl)
+
+class Task(Base):
+    __tablename__ = "tasks"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    category = Column(String(255))
+    priority = Column(String(20), default="MEDIUM")
+    status = Column(String(20), default="PENDING", index=True)
+    task_type = Column(String(20), default="INSTANT")
+    time_interval = Column(Integer, default=30)
+    time_unit = Column(String(20), default="MINUTES")
+    allocated_datetime = Column(DateTime)   # naive SL time
+    deadline = Column(DateTime)             # naive SL time
+    recurrence_pattern = Column(String(50))
+    recurrence_intervals = Column(JSON)
+    proof_photos = Column(JSON, default=list)
+    attachments = Column(JSON, default=list)
+    assigned_to = Column(String(36), ForeignKey("users.id"), index=True)
+    assigned_to_name = Column(String(255))
+    created_by = Column(String(36), ForeignKey("users.id"))
+    created_by_name = Column(String(255))
+    started_at = Column(DateTime)
+    completed_at = Column(DateTime)
+    verified_at = Column(DateTime)
+    verified_by = Column(String(36))
+    is_deleted = Column(Boolean, default=False, index=True)
+    is_overdue = Column(Boolean, default=False)
+    is_late = Column(Boolean, default=False)
+    is_archived = Column(Boolean, default=False, index=True)
+    archived_at = Column(DateTime)
+    actual_time_taken = Column(Integer)
+    parent_task_id = Column(String(36))
+    template_id = Column(String(36))
+    created_at = Column(DateTime, default=now_sl, index=True)
+    updated_at = Column(DateTime, default=now_sl, onupdate=now_sl)
 
 class TaskComment(Base):
     __tablename__ = "task_comments"
-    
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    task_id = Column(String(36), ForeignKey("tasks.id"), nullable=False, index=True)
-    user_id = Column(String(36), nullable=False)
+    task_id = Column(String(36), ForeignKey("tasks.id"), index=True)
+    user_id = Column(String(36), ForeignKey("users.id"))
     user_name = Column(String(255))
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-class TaskAttachment(Base):
-    __tablename__ = "task_attachments"
-    
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    task_id = Column(String(36), ForeignKey("tasks.id"), nullable=False, index=True)
-    filename = Column(String(255), nullable=False)
-    file_path = Column(String(500), nullable=False)
-    content_type = Column(String(100))
-    file_size = Column(Integer)
-    thumbnail_path = Column(String(500))
-    uploaded_by = Column(String(36))
-    uploaded_by_name = Column(String(255))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=now_sl)
 
 class TaskActivityLog(Base):
     __tablename__ = "task_activity_logs"
-    
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    task_id = Column(String(36), ForeignKey("tasks.id"), nullable=False, index=True)
-    user_id = Column(String(36), nullable=False)
+    task_id = Column(String(36), ForeignKey("tasks.id"), index=True)
+    user_id = Column(String(36), ForeignKey("users.id"))
     user_name = Column(String(255))
-    action = Column(String(50), nullable=False)
+    action = Column(String(100), nullable=False)
     details = Column(Text)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=now_sl)
 
 class Notification(Base):
     __tablename__ = "notifications"
-    
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), index=True)
     type = Column(String(50), nullable=False)
     title = Column(String(255), nullable=False)
     message = Column(Text)
     task_id = Column(String(36))
     is_read = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime, default=now_sl)
 
-class PushSubscription(Base):
-    __tablename__ = "push_subscriptions"
-    
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), nullable=False, index=True)
-    endpoint = Column(Text, nullable=False)
-    keys = Column(Text)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-class NotificationLog(Base):
-    __tablename__ = "notification_logs"
-    
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    type = Column(String(50), nullable=False)
-    recipient = Column(String(255))
-    message = Column(Text)
-    status = Column(String(20))
-    response = Column(Text)
-    sent_by = Column(String(36))
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-
-# Create tables
 Base.metadata.create_all(bind=engine)
 
-# ============== Pydantic Models ==============
-
+# ===================== PYDANTIC SCHEMAS =====================
 class UserCreate(BaseModel):
     name: str
     email: EmailStr
-    phone: str
-    password: str
-    role: str = "STAFF"
-
-class UserUpdate(BaseModel):
-    name: Optional[str] = None
     phone: Optional[str] = None
-    role: Optional[str] = None
-    status: Optional[str] = None
+    role: str = "STAFF"
+    password: str
 
 class UserResponse(BaseModel):
     id: str
     name: str
     email: str
-    phone: str
+    phone: Optional[str] = None
     role: str
     status: str
-    created_at: str
-    employee_id: Optional[str] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -228,36 +251,17 @@ class TokenResponse(BaseModel):
     token_type: str = "bearer"
     user: UserResponse
 
-class TaskTemplateCreate(BaseModel):
-    name: str
-    default_category: Optional[str] = None
-    default_priority: Optional[str] = None
-
-class TaskTemplateResponse(BaseModel):
-    id: str
-    name: str
-    default_category: Optional[str] = None
-    default_priority: Optional[str] = None
-    is_active: bool
-    created_at: str
-
-class CategoryCreate(BaseModel):
-    name: str
-    color: Optional[str] = "#6B7280"
-
-class CategoryResponse(BaseModel):
-    id: str
-    name: str
-    color: str
-    is_active: bool
-    created_at: str
-
 class TaskCreate(BaseModel):
     title: str
-    description: Optional[str] = ""
+    description: Optional[str] = None
     category: str = "Other"
     priority: str = "MEDIUM"
-    due_date: Optional[str] = None
+    task_type: str = "INSTANT"
+    time_interval: int = 30
+    time_unit: str = "MINUTES"
+    allocated_datetime: Optional[datetime] = None
+    recurrence_pattern: Optional[str] = None
+    recurrence_intervals: Optional[List[int]] = None
     assigned_to: Optional[str] = None
 
 class TaskUpdate(BaseModel):
@@ -265,27 +269,100 @@ class TaskUpdate(BaseModel):
     description: Optional[str] = None
     category: Optional[str] = None
     priority: Optional[str] = None
-    due_date: Optional[str] = None
     assigned_to: Optional[str] = None
-    status: Optional[str] = None
+    time_interval: Optional[int] = None
+    time_unit: Optional[str] = None
+    allocated_datetime: Optional[datetime] = None
 
 class TaskResponse(BaseModel):
     id: str
     title: str
-    description: str
+    description: Optional[str] = None
     category: str
     priority: str
-    due_date: Optional[str]
     status: str
-    created_by: str
-    created_by_name: str
-    assigned_to: Optional[str]
-    assigned_to_name: Optional[str]
-    created_at: str
-    updated_at: str
+    task_type: str
+    time_interval: int
+    time_unit: str
+    allocated_datetime: Optional[datetime] = None
+    deadline: Optional[datetime] = None
+    recurrence_pattern: Optional[str] = None
+    recurrence_intervals: Optional[List[int]] = None
+    proof_photos: List[str] = []
+    attachments: List[str] = []
+    assigned_to: Optional[str] = None
+    assigned_to_name: Optional[str] = None
+    created_by: Optional[str] = None
+    created_by_name: Optional[str] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    verified_at: Optional[datetime] = None
+    is_overdue: bool = False
+    created_at: datetime
+    updated_at: datetime
+    class Config:
+        from_attributes = True
+
+class CategoryCreate(BaseModel):
+    name: str
+    color: str = "#6B7280"
+
+class CategoryResponse(BaseModel):
+    id: str
+    name: str
+    color: str
+    created_at: datetime
+    class Config:
+        from_attributes = True
+
+class TemplateCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    category: str = "Other"
+    priority: str = "MEDIUM"
+    time_interval: int = 30
+    time_unit: str = "MINUTES"
+    is_recurring: bool = False
+    day_intervals: Optional[str] = None
+    allocated_time: Optional[str] = None  # "HH:MM" in SL time
+    assigned_to: Optional[str] = None
+
+class TemplateUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    category: Optional[str] = None
+    priority: Optional[str] = None
+    time_interval: Optional[int] = None
+    time_unit: Optional[str] = None
+    is_recurring: Optional[bool] = None
+    is_active: Optional[bool] = None
+    day_intervals: Optional[str] = None
+    allocated_time: Optional[str] = None
+    assigned_to: Optional[str] = None
+
+class TemplateResponse(BaseModel):
+    id: str
+    title: str
+    description: Optional[str] = None
+    category: str
+    priority: str
+    time_interval: int
+    time_unit: str
+    is_recurring: bool = False
+    is_active: bool = True
+    day_intervals: Optional[str] = None
+    allocated_time: Optional[str] = None
+    assigned_to: Optional[str] = None
+    assigned_to_name: Optional[str] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
 
 class CommentCreate(BaseModel):
     content: str
+
+class BulkDeleteRequest(BaseModel):
+    task_ids: List[str]
 
 class CommentResponse(BaseModel):
     id: str
@@ -293,49 +370,31 @@ class CommentResponse(BaseModel):
     user_id: str
     user_name: str
     content: str
-    created_at: str
-
-class ActivityLogResponse(BaseModel):
-    id: str
-    task_id: str
-    user_id: str
-    user_name: str
-    action: str
-    details: str
-    created_at: str
+    created_at: datetime
+    class Config:
+        from_attributes = True
 
 class NotificationResponse(BaseModel):
     id: str
-    user_id: str
     type: str
     title: str
-    message: str
+    message: Optional[str] = None
     task_id: Optional[str] = None
     is_read: bool
-    created_at: str
-
-class AttachmentResponse(BaseModel):
-    id: str
-    task_id: str
-    filename: str
-    content_type: str
-    file_size: Optional[int] = None
-    uploaded_by_name: str
-    created_at: str
-    url: str
-    thumbnail_url: Optional[str] = None
+    created_at: datetime
+    class Config:
+        from_attributes = True
 
 class DashboardStats(BaseModel):
     total_tasks: int
     in_progress: int
     completed: int
     verified: int
-    tasks_to_assign: Optional[int] = None
-    tasks_to_verify: Optional[int] = None
-    total_staff: Optional[int] = None
+    tasks_to_assign: int
+    tasks_to_verify: int
+    staff_count: int
 
-# ============== Database Dependency ==============
-
+# ===================== DATABASE DEPENDENCY =====================
 def get_db():
     db = SessionLocal()
     try:
@@ -343,8 +402,67 @@ def get_db():
     finally:
         db.close()
 
-# ============== Auth Helpers ==============
+# ===================== WEBSOCKET MANAGER =====================
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: Dict[str, List[WebSocket]] = {}
 
+    async def connect(self, websocket: WebSocket, user_id: str):
+        await websocket.accept()
+        if user_id not in self.active_connections:
+            self.active_connections[user_id] = []
+        self.active_connections[user_id].append(websocket)
+        logger.info(f"WebSocket connected for user {user_id}")
+
+    def disconnect(self, websocket: WebSocket, user_id: str):
+        if user_id in self.active_connections:
+            if websocket in self.active_connections[user_id]:
+                self.active_connections[user_id].remove(websocket)
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+
+    async def broadcast_to_user(self, user_id: str, message: dict):
+        if user_id not in self.active_connections:
+            return False
+        connections = self.active_connections[user_id][:]
+        sent_count = 0
+        dead_connections = []
+        for connection in connections:
+            try:
+                await connection.send_json(message)
+                sent_count += 1
+            except Exception as e:
+                logger.error(f"Failed to send to user {user_id}: {e}")
+                dead_connections.append(connection)
+        for dead in dead_connections:
+            if dead in self.active_connections.get(user_id, []):
+                self.active_connections[user_id].remove(dead)
+        if user_id in self.active_connections and not self.active_connections[user_id]:
+            del self.active_connections[user_id]
+        return sent_count > 0
+
+    async def broadcast_to_all(self, message: dict):
+        total_sent = 0
+        dead_connections = []
+        for user_id, connections in list(self.active_connections.items()):
+            for connection in connections[:]:
+                try:
+                    await connection.send_json(message)
+                    total_sent += 1
+                except Exception as e:
+                    logger.error(f"Failed to broadcast to user {user_id}: {e}")
+                    dead_connections.append((user_id, connection))
+        for user_id, dead in dead_connections:
+            if dead in self.active_connections.get(user_id, []):
+                self.active_connections[user_id].remove(dead)
+        for user_id in list(self.active_connections.keys()):
+            if not self.active_connections[user_id]:
+                del self.active_connections[user_id]
+        logger.info(f"Broadcast to all: sent to {total_sent} connections")
+
+manager = ConnectionManager()
+
+# ===================== HELPER FUNCTIONS =====================
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
@@ -353,25 +471,30 @@ def get_password_hash(password: str) -> str:
 
 def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
+    expire = now_sl() + timedelta(hours=ACCESS_TOKEN_EXPIRE_HOURS)
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
+def calculate_deadline(allocated_dt: datetime, time_interval: int, time_unit: str) -> datetime:
+    """Calculate deadline. Both input and output are naive SL datetimes."""
+    unit = (time_unit or "MINUTES").upper()
+    if unit == "HOURS":
+        return allocated_dt + timedelta(hours=time_interval)
+    return allocated_dt + timedelta(minutes=time_interval)
+
 def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    token = credentials.credentials
     try:
-        payload = jwt.decode(credentials.credentials, SECRET_KEY, algorithms=[ALGORITHM])
-        user_id = payload.get("sub")
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id: str = payload.get("sub")
         if user_id is None:
             raise HTTPException(status_code=401, detail="Invalid token")
-        
-        user = db.query(User).filter(User.id == user_id).first()
-        if user is None:
-            raise HTTPException(status_code=401, detail="User not found")
-        if user.status != "ACTIVE":
-            raise HTTPException(status_code=401, detail="User is inactive")
-        return user
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(status_code=401, detail="User not found")
+    return user
 
 def require_roles(allowed_roles: List[str]):
     def role_checker(current_user: User = Depends(get_current_user)):
@@ -380,637 +503,871 @@ def require_roles(allowed_roles: List[str]):
         return current_user
     return role_checker
 
-# ============== Helper Functions ==============
-
-def log_activity(db: Session, task_id: str, user_id: str, user_name: str, action: str, details: str):
-    log_entry = TaskActivityLog(
-        id=str(uuid.uuid4()),
-        task_id=task_id,
-        user_id=user_id,
-        user_name=user_name,
-        action=action,
-        details=details
-    )
-    db.add(log_entry)
-    db.commit()
-
-def create_notification(db: Session, user_id: str, notification_type: str, title: str, message: str, task_id: str = None):
-    notification = Notification(
-        id=str(uuid.uuid4()),
-        user_id=user_id,
-        type=notification_type,
-        title=title,
-        message=message,
-        task_id=task_id
-    )
+async def create_notification(db: Session, user_id: str, type: str, title: str, message: str, task_id: str = None):
+    notification = Notification(user_id=user_id, type=type, title=title, message=message, task_id=task_id)
     db.add(notification)
     db.commit()
+    await manager.broadcast_to_user(user_id, {
+        "type": "notification",
+        "data": {
+            "id": notification.id,
+            "type": type,
+            "title": title,
+            "message": message,
+            "task_id": task_id,
+            "is_read": False,
+            "created_at": notification.created_at.isoformat()
+        }
+    })
 
-def user_to_response(user: User) -> UserResponse:
-    return UserResponse(
-        id=user.id,
-        name=user.name,
-        email=user.email,
-        phone=user.phone or "",
-        role=user.role,
-        status=user.status,
-        created_at=user.created_at.isoformat() if user.created_at else "",
-        employee_id=user.employee_id
-    )
+def create_activity_log(db: Session, task_id: str, user_id: str, user_name: str, action: str, details: str = None):
+    log = TaskActivityLog(task_id=task_id, user_id=user_id, user_name=user_name, action=action, details=details)
+    db.add(log)
+    db.commit()
 
-def task_to_response(task: Task) -> TaskResponse:
-    return TaskResponse(
-        id=task.id,
-        title=task.title,
-        description=task.description or "",
-        category=task.category or "Other",
-        priority=task.priority or "MEDIUM",
-        due_date=task.due_date.isoformat() if task.due_date else None,
-        status=task.status,
-        created_by=task.created_by,
-        created_by_name=task.created_by_name or "",
-        assigned_to=task.assigned_to,
-        assigned_to_name=task.assigned_to_name,
-        created_at=task.created_at.isoformat() if task.created_at else "",
-        updated_at=task.updated_at.isoformat() if task.updated_at else ""
-    )
-
-def optimize_image(file_path: Path, max_size: int = 1920) -> Path:
-    """Optimize image and create thumbnail"""
-    try:
-        with Image.open(file_path) as img:
-            # Convert to RGB if necessary
-            if img.mode in ('RGBA', 'P'):
-                img = img.convert('RGB')
-            
-            # Resize if too large
-            if max(img.size) > max_size:
-                img.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-            
-            # Save optimized
-            optimized_path = file_path.with_suffix('.jpg')
-            img.save(optimized_path, 'JPEG', quality=85, optimize=True)
-            
-            # Create thumbnail
-            thumb_path = file_path.parent / f"thumb_{file_path.stem}.jpg"
-            img.thumbnail((300, 300), Image.Resampling.LANCZOS)
-            img.save(thumb_path, 'JPEG', quality=75, optimize=True)
-            
-            return optimized_path, thumb_path
-    except Exception as e:
-        logger.error(f"Image optimization failed: {e}")
-        return file_path, None
-
-# ============== FastAPI App ==============
-
-app = FastAPI(title="Zomoto Tasks API", version="1.0.0")
-api_router = APIRouter(prefix="/api")
-
-# ============== AUTH ROUTES ==============
-
+# ===================== AUTH ENDPOINTS =====================
 @api_router.post("/auth/login", response_model=TokenResponse)
 def login(request: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == request.email).first()
-    if not user or not verify_password(request.password, user.password):
+    if not user or not verify_password(request.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     if user.status != "ACTIVE":
-        raise HTTPException(status_code=401, detail="Account is inactive")
-    
+        raise HTTPException(status_code=403, detail="Account is inactive")
     access_token = create_access_token(data={"sub": user.id, "role": user.role})
-    return TokenResponse(access_token=access_token, user=user_to_response(user))
+    return TokenResponse(
+        access_token=access_token,
+        user=UserResponse(id=user.id, name=user.name, email=user.email, phone=user.phone,
+                          role=user.role, status=user.status, created_at=user.created_at)
+    )
 
 @api_router.get("/auth/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
-    return user_to_response(current_user)
+    return UserResponse(id=current_user.id, name=current_user.name, email=current_user.email,
+                        phone=current_user.phone, role=current_user.role, status=current_user.status,
+                        created_at=current_user.created_at)
 
-# ============== USER ROUTES ==============
+# ===================== USER ENDPOINTS =====================
+@api_router.get("/users", response_model=List[UserResponse])
+def get_users(db: Session = Depends(get_db), current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    users = db.query(User).all()
+    return [UserResponse(id=u.id, name=u.name, email=u.email, phone=u.phone,
+                         role=u.role, status=u.status, created_at=u.created_at) for u in users]
+
+@api_router.get("/users/staff", response_model=List[UserResponse])
+def get_staff(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    users = db.query(User).filter(User.role.in_(["STAFF", "MANAGER"]), User.status == "ACTIVE").all()
+    return [UserResponse(id=u.id, name=u.name, email=u.email, phone=u.phone,
+                         role=u.role, status=u.status, created_at=u.created_at) for u in users]
 
 @api_router.post("/users", response_model=UserResponse)
-def create_user(user_data: UserCreate, current_user: User = Depends(require_roles(["OWNER"])), db: Session = Depends(get_db)):
+def create_user(user_data: UserCreate, db: Session = Depends(get_db),
+                current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
     existing = db.query(User).filter(User.email == user_data.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="Email already registered")
-    
-    user = User(
-        id=str(uuid.uuid4()),
-        name=user_data.name,
-        email=user_data.email,
-        phone=user_data.phone,
-        password=get_password_hash(user_data.password),
-        role=user_data.role,
-        status="ACTIVE",
-        created_by=current_user.id,
-        employee_id=f"EMP{str(uuid.uuid4())[:8].upper()}"
-    )
+    user = User(name=user_data.name, email=user_data.email, phone=user_data.phone,
+                role=user_data.role, hashed_password=get_password_hash(user_data.password))
     db.add(user)
     db.commit()
-    return user_to_response(user)
-
-@api_router.get("/users", response_model=List[UserResponse])
-def get_users(current_user: User = Depends(require_roles(["OWNER", "MANAGER"])), db: Session = Depends(get_db)):
-    users = db.query(User).filter(User.role != "OWNER").all()
-    return [user_to_response(u) for u in users]
-
-@api_router.get("/users/staff", response_model=List[UserResponse])
-def get_staff_users(current_user: User = Depends(require_roles(["OWNER", "MANAGER"])), db: Session = Depends(get_db)):
-    users = db.query(User).filter(User.role == "STAFF", User.status == "ACTIVE").all()
-    return [user_to_response(u) for u in users]
+    db.refresh(user)
+    return UserResponse(id=user.id, name=user.name, email=user.email, phone=user.phone,
+                        role=user.role, status=user.status, created_at=user.created_at)
 
 @api_router.put("/users/{user_id}", response_model=UserResponse)
-def update_user(user_id: str, user_data: UserUpdate, current_user: User = Depends(require_roles(["OWNER"])), db: Session = Depends(get_db)):
+def update_user(user_id: str, name: str = None, phone: str = None, role: str = None, status: str = None,
+                db: Session = Depends(get_db), current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
-    for field, value in user_data.model_dump(exclude_unset=True).items():
-        if value is not None:
-            setattr(user, field, value)
+    if name: user.name = name
+    if phone: user.phone = phone
+    if role: user.role = role
+    if status: user.status = status
     db.commit()
-    return user_to_response(user)
-
-@api_router.delete("/users/{user_id}")
-def deactivate_user(user_id: str, current_user: User = Depends(require_roles(["OWNER"])), db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.id == user_id).first()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
-    user.status = "INACTIVE"
-    db.commit()
-    return {"message": "User deactivated successfully"}
+    db.refresh(user)
+    return UserResponse(id=user.id, name=user.name, email=user.email, phone=user.phone,
+                        role=user.role, status=user.status, created_at=user.created_at)
 
 @api_router.post("/users/{user_id}/reset-password")
-def reset_password(user_id: str, current_user: User = Depends(require_roles(["OWNER"])), db: Session = Depends(get_db)):
+def reset_password(user_id: str, new_password: str = "123456", db: Session = Depends(get_db),
+                   current_user: User = Depends(require_roles(["OWNER"]))):
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    user.password = get_password_hash("123456")
+    user.hashed_password = get_password_hash(new_password)
     db.commit()
-    return {"message": "Password reset to 123456"}
+    return {"message": "Password reset successfully"}
 
-# ============== CATEGORY ROUTES ==============
+# ===================== CATEGORY ENDPOINTS =====================
+@api_router.get("/categories", response_model=List[CategoryResponse])
+def get_categories(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    categories = db.query(Category).all()
+    return [CategoryResponse(id=c.id, name=c.name, color=c.color, created_at=c.created_at) for c in categories]
 
 @api_router.post("/categories", response_model=CategoryResponse)
-def create_category(category_data: CategoryCreate, current_user: User = Depends(require_roles(["OWNER", "MANAGER"])), db: Session = Depends(get_db)):
-    existing = db.query(Category).filter(Category.name.ilike(category_data.name), Category.is_active == True).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Category already exists")
-    
-    category = Category(
-        id=str(uuid.uuid4()),
-        name=category_data.name,
-        color=category_data.color or "#6B7280",
-        created_by=current_user.id
-    )
+def create_category(category_data: CategoryCreate, db: Session = Depends(get_db),
+                    current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    category = Category(name=category_data.name, color=category_data.color)
     db.add(category)
     db.commit()
-    return CategoryResponse(id=category.id, name=category.name, color=category.color, is_active=category.is_active, created_at=category.created_at.isoformat())
-
-@api_router.get("/categories", response_model=List[CategoryResponse])
-def get_categories(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    categories = db.query(Category).filter(Category.is_active == True).all()
-    
-    if not categories:
-        defaults = [
-            Category(id="cat-kitchen", name="Kitchen", color="#EF4444", is_active=True),
-            Category(id="cat-cleaning", name="Cleaning", color="#10B981", is_active=True),
-            Category(id="cat-maintenance", name="Maintenance", color="#F59E0B", is_active=True),
-            Category(id="cat-other", name="Other", color="#6B7280", is_active=True),
-        ]
-        for cat in defaults:
-            db.add(cat)
-        db.commit()
-        categories = defaults
-    
-    return [CategoryResponse(id=c.id, name=c.name, color=c.color, is_active=c.is_active, created_at=c.created_at.isoformat() if c.created_at else "") for c in categories]
+    db.refresh(category)
+    return CategoryResponse(id=category.id, name=category.name, color=category.color, created_at=category.created_at)
 
 @api_router.put("/categories/{category_id}", response_model=CategoryResponse)
-def update_category(category_id: str, category_data: CategoryCreate, current_user: User = Depends(require_roles(["OWNER", "MANAGER"])), db: Session = Depends(get_db)):
+def update_category(category_id: str, name: str = None, color: str = None, db: Session = Depends(get_db),
+                    current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
     category = db.query(Category).filter(Category.id == category_id).first()
     if not category:
         raise HTTPException(status_code=404, detail="Category not found")
-    category.name = category_data.name
-    if category_data.color:
-        category.color = category_data.color
+    if name: category.name = name
+    if color: category.color = color
     db.commit()
-    return CategoryResponse(id=category.id, name=category.name, color=category.color, is_active=category.is_active, created_at=category.created_at.isoformat() if category.created_at else "")
+    db.refresh(category)
+    return CategoryResponse(id=category.id, name=category.name, color=category.color, created_at=category.created_at)
 
 @api_router.delete("/categories/{category_id}")
-def delete_category(category_id: str, current_user: User = Depends(require_roles(["OWNER", "MANAGER"])), db: Session = Depends(get_db)):
-    tasks_using = db.query(Task).filter(Task.category == category_id).count()
-    if tasks_using > 0:
-        raise HTTPException(status_code=400, detail=f"Cannot delete - {tasks_using} tasks are using it")
-    db.query(Category).filter(Category.id == category_id).update({"is_active": False})
+def delete_category(category_id: str, db: Session = Depends(get_db),
+                    current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    category = db.query(Category).filter(Category.id == category_id).first()
+    if not category:
+        raise HTTPException(status_code=404, detail="Category not found")
+    db.delete(category)
     db.commit()
     return {"message": "Category deleted"}
 
-# ============== TASK TEMPLATE ROUTES ==============
+# ===================== TASK TEMPLATE ENDPOINTS =====================
+def template_to_response(t: TaskTemplate) -> dict:
+    return {
+        "id": t.id,
+        "title": t.title,
+        "description": t.description,
+        "category": t.category or "Other",
+        "priority": t.priority or "MEDIUM",
+        "time_interval": t.time_interval or 30,
+        "time_unit": t.time_unit or "MINUTES",
+        "is_recurring": t.is_recurring or False,
+        "is_active": t.is_active if t.is_active is not None else True,
+        "day_intervals": t.day_intervals,
+        "allocated_time": t.allocated_time,
+        "assigned_to": t.assigned_to,
+        "assigned_to_name": t.assigned_to_name,
+        "created_at": t.created_at.isoformat() if t.created_at else None,
+    }
 
-@api_router.post("/task-templates", response_model=TaskTemplateResponse)
-def create_task_template(template_data: TaskTemplateCreate, current_user: User = Depends(require_roles(["OWNER", "MANAGER"])), db: Session = Depends(get_db)):
-    existing = db.query(TaskTemplate).filter(TaskTemplate.name_lower == template_data.name.lower(), TaskTemplate.is_active == True).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Task template already exists")
-    
+@api_router.get("/task-templates")
+def get_templates(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    templates = db.query(TaskTemplate).all()
+    return [template_to_response(t) for t in templates]
+
+@api_router.post("/task-templates")
+def create_template(template_data: TemplateCreate, db: Session = Depends(get_db),
+                    current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    assigned_to_name = None
+    if template_data.assigned_to:
+        staff = db.query(User).filter(User.id == template_data.assigned_to).first()
+        if staff:
+            assigned_to_name = staff.name
     template = TaskTemplate(
-        id=str(uuid.uuid4()),
-        name=template_data.name,
-        name_lower=template_data.name.lower(),
-        default_category=template_data.default_category,
-        default_priority=template_data.default_priority,
+        title=template_data.title, description=template_data.description,
+        category=template_data.category, priority=template_data.priority,
+        time_interval=template_data.time_interval, time_unit=template_data.time_unit,
+        is_recurring=template_data.is_recurring, day_intervals=template_data.day_intervals,
+        allocated_time=template_data.allocated_time,  # stored as "HH:MM" SL time
+        assigned_to=template_data.assigned_to, assigned_to_name=assigned_to_name,
         created_by=current_user.id
     )
     db.add(template)
     db.commit()
-    return TaskTemplateResponse(id=template.id, name=template.name, default_category=template.default_category, default_priority=template.default_priority, is_active=template.is_active, created_at=template.created_at.isoformat())
+    db.refresh(template)
+    return template_to_response(template)
 
-@api_router.get("/task-templates", response_model=List[TaskTemplateResponse])
-def get_task_templates(search: Optional[str] = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    query = db.query(TaskTemplate).filter(TaskTemplate.is_active == True)
-    if search:
-        query = query.filter(TaskTemplate.name_lower.like(f"%{search.lower()}%"))
-    templates = query.all()
-    return [TaskTemplateResponse(id=t.id, name=t.name, default_category=t.default_category, default_priority=t.default_priority, is_active=t.is_active, created_at=t.created_at.isoformat() if t.created_at else "") for t in templates]
+@api_router.put("/task-templates/{template_id}")
+def update_template(template_id: str, template_data: TemplateUpdate, db: Session = Depends(get_db),
+                    current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    template = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    update_fields = template_data.dict(exclude_unset=True)
+    if "assigned_to" in update_fields and update_fields["assigned_to"]:
+        staff = db.query(User).filter(User.id == update_fields["assigned_to"]).first()
+        if staff:
+            template.assigned_to_name = staff.name
+    for key, value in update_fields.items():
+        if value is not None:
+            setattr(template, key, value)
+    db.commit()
+    db.refresh(template)
+    return template_to_response(template)
 
 @api_router.delete("/task-templates/{template_id}")
-def delete_task_template(template_id: str, current_user: User = Depends(require_roles(["OWNER", "MANAGER"])), db: Session = Depends(get_db)):
-    db.query(TaskTemplate).filter(TaskTemplate.id == template_id).update({"is_active": False})
+def delete_template(template_id: str, db: Session = Depends(get_db),
+                    current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    template = db.query(TaskTemplate).filter(TaskTemplate.id == template_id).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    db.delete(template)
     db.commit()
-    return {"message": "Task template deleted"}
+    return {"message": "Template deleted"}
 
-# ============== TASK ROUTES ==============
-
-@api_router.post("/tasks", response_model=TaskResponse)
-def create_task(task_data: TaskCreate, current_user: User = Depends(require_roles(["OWNER", "MANAGER"])), db: Session = Depends(get_db)):
-    assigned_to_name = None
-    status = "CREATED"
-    
-    if task_data.assigned_to:
-        assigned_user = db.query(User).filter(User.id == task_data.assigned_to).first()
-        if assigned_user:
-            assigned_to_name = assigned_user.name
-            status = "ASSIGNED"
-    
-    due_date = None
-    if task_data.due_date:
+def _build_task_from_template(tmpl: TaskTemplate, today, now: datetime) -> Task:
+    """Helper: build a Task from a recurring template for today. All times are naive SL."""
+    # allocated_time is "HH:MM" in SL time — combine with today's date
+    if tmpl.allocated_time:
         try:
-            due_date = datetime.fromisoformat(task_data.due_date.replace('Z', '+00:00'))
-        except:
-            pass
-    
-    task = Task(
-        id=str(uuid.uuid4()),
-        title=task_data.title,
-        description=task_data.description or "",
-        category=task_data.category,
-        priority=task_data.priority,
-        due_date=due_date,
-        status=status,
-        created_by=current_user.id,
-        created_by_name=current_user.name,
-        assigned_to=task_data.assigned_to,
-        assigned_to_name=assigned_to_name
-    )
-    db.add(task)
-    db.commit()
-    
-    log_activity(db, task.id, current_user.id, current_user.name, "CREATED", f"Task '{task.title}' created")
-    
-    if task_data.assigned_to:
-        log_activity(db, task.id, current_user.id, current_user.name, "ASSIGNED", f"Task assigned to {assigned_to_name}")
-        create_notification(db, task_data.assigned_to, "TASK_ASSIGNED", "New Task Assigned", f"You have been assigned: {task.title}", task.id)
-    
-    return task_to_response(task)
+            hour, minute = map(int, tmpl.allocated_time.split(":"))
+            allocated_dt = datetime.combine(today, datetime.min.time()).replace(hour=hour, minute=minute)
+        except ValueError:
+            allocated_dt = now
+    else:
+        allocated_dt = now
 
-@api_router.get("/tasks", response_model=List[TaskResponse])
-def get_tasks(status: Optional[str] = None, assigned_to: Optional[str] = None, category: Optional[str] = None, priority: Optional[str] = None, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    query = db.query(Task)
-    
+    interval = tmpl.time_interval or 30
+    unit = (tmpl.time_unit or "MINUTES").upper()
+    deadline = calculate_deadline(allocated_dt, interval, unit)
+
+    date_str = today.strftime("%b %d")
+    time_str = ""
+    if tmpl.allocated_time:
+        try:
+            t = datetime.strptime(tmpl.allocated_time, "%H:%M")
+            time_str = " " + t.strftime("%I:%M %p")
+        except ValueError:
+            pass
+    task_title = f"{tmpl.title} ({date_str}{time_str})"
+
+    return Task(
+        title=task_title, description=tmpl.description, category=tmpl.category,
+        priority=(tmpl.priority or "MEDIUM").upper(), status="PENDING",
+        task_type="RECURRING", time_interval=interval, time_unit=unit,
+        allocated_datetime=allocated_dt, deadline=deadline,
+        assigned_to=tmpl.assigned_to, assigned_to_name=tmpl.assigned_to_name,
+        created_by=tmpl.created_by, created_by_name="System", template_id=tmpl.id,
+    )
+
+@api_router.post("/task-templates/generate-now")
+async def generate_recurring_now(db: Session = Depends(get_db),
+                                  current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    """Manually trigger recurring task generation for today."""
+    now = now_sl()
+    today = now.date()
+    today_day = today.day
+    generated = 0
+
+    templates = db.query(TaskTemplate).filter(
+        TaskTemplate.is_recurring == True,
+        TaskTemplate.is_active == True
+    ).all()
+
+    for tmpl in templates:
+        scheduled_days = parse_day_intervals(tmpl.day_intervals)
+        if not scheduled_days or today_day not in scheduled_days:
+            continue
+        today_start = datetime.combine(today, datetime.min.time())
+        today_end = datetime.combine(today, datetime.max.time())
+        existing = db.query(Task).filter(
+            Task.template_id == tmpl.id,
+            Task.created_at >= today_start,
+            Task.created_at <= today_end,
+            Task.is_deleted == False
+        ).first()
+        if existing:
+            continue
+        task = _build_task_from_template(tmpl, today, now)
+        db.add(task)
+        generated += 1
+
+    db.commit()
+    return {"message": f"Generated {generated} recurring tasks for today"}
+
+# ===================== TASK ENDPOINTS =====================
+def task_to_response(task: Task) -> dict:
+    def fmt(dt):
+        return dt.isoformat() if dt else None
+    return {
+        "id": task.id, "title": task.title, "description": task.description,
+        "category": task.category, "priority": (task.priority or "MEDIUM").upper(),
+        "status": (task.status or "PENDING").upper(), "task_type": (task.task_type or "INSTANT").upper(),
+        "time_interval": task.time_interval or 0, "time_unit": (task.time_unit or "MINUTES").upper(),
+        # These are naive SL datetimes — returned as ISO strings (no tz suffix).
+        # Frontend should treat them as local SL time.
+        "allocated_datetime": fmt(task.allocated_datetime),
+        "deadline": fmt(task.deadline),
+        "recurrence_pattern": task.recurrence_pattern,
+        "recurrence_intervals": task.recurrence_intervals or [],
+        "proof_photos": task.proof_photos or [], "attachments": task.attachments or [],
+        "assigned_to": task.assigned_to, "assigned_to_name": task.assigned_to_name,
+        "created_by": task.created_by, "created_by_name": task.created_by_name,
+        "started_at": fmt(task.started_at), "completed_at": fmt(task.completed_at),
+        "verified_at": fmt(task.verified_at),
+        "is_overdue": task.is_overdue, "is_late": task.is_late or False,
+        "is_archived": task.is_archived or False,
+        "archived_at": fmt(task.archived_at) if hasattr(task, 'archived_at') else None,
+        "actual_time_taken": task.actual_time_taken, "template_id": task.template_id,
+        "created_at": fmt(task.created_at), "updated_at": fmt(task.updated_at)
+    }
+
+@api_router.get("/tasks")
+def get_tasks(status: str = None, category: str = None, priority: str = None, assigned_to: str = None,
+              db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    query = db.query(Task).filter(Task.is_deleted == False, Task.is_archived == False)
     if current_user.role == "STAFF":
         query = query.filter(Task.assigned_to == current_user.id)
-    elif assigned_to:
-        query = query.filter(Task.assigned_to == assigned_to)
-    
     if status:
         query = query.filter(Task.status == status)
     if category:
         query = query.filter(Task.category == category)
     if priority:
         query = query.filter(Task.priority == priority)
-    
+    if assigned_to:
+        query = query.filter(Task.assigned_to == assigned_to)
+
+    # now_sl() is naive SL time — same reference frame as stored DB datetimes
+    now = now_sl()
+    today = now.day
+
     tasks = query.order_by(Task.created_at.desc()).all()
-    return [task_to_response(t) for t in tasks]
+    result = []
+    for task in tasks:
+        # For recurring tasks: check today is in schedule and allocated time has passed
+        if task.task_type == "RECURRING" and task.recurrence_intervals:
+            if today not in task.recurrence_intervals:
+                continue
+            if task.allocated_datetime and task.allocated_datetime > now:
+                continue
+        result.append(task_to_response(task))
+    return result
 
-@api_router.get("/tasks/{task_id}", response_model=TaskResponse)
-def get_task(task_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    if current_user.role == "STAFF" and task.assigned_to != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    return task_to_response(task)
+@api_router.post("/tasks")
+async def create_task(task_data: TaskCreate, db: Session = Depends(get_db),
+                      current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    assigned_to_name = None
+    if task_data.assigned_to:
+        assigned_user = db.query(User).filter(User.id == task_data.assigned_to).first()
+        if assigned_user:
+            assigned_to_name = assigned_user.name
 
-@api_router.put("/tasks/{task_id}", response_model=TaskResponse)
-def update_task(task_id: str, task_data: TaskUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    if current_user.role == "STAFF":
-        if task.assigned_to != current_user.id:
-            raise HTTPException(status_code=403, detail="Access denied")
-        
-        if task_data.status:
-            valid_transitions = {"ASSIGNED": ["IN_PROGRESS"], "IN_PROGRESS": ["COMPLETED"]}
-            if task_data.status not in valid_transitions.get(task.status, []):
-                raise HTTPException(status_code=400, detail=f"Invalid status transition from {task.status}")
-            task.status = task_data.status
-            log_activity(db, task_id, current_user.id, current_user.name, "STATUS_CHANGED", f"Status changed to {task_data.status}")
-            
-            if task_data.status == "COMPLETED" and task.created_by:
-                create_notification(db, task.created_by, "TASK_COMPLETED", "Task Completed", f"Task '{task.title}' has been completed", task_id)
+    # KEY FIX: Convert incoming datetime to naive SL time.
+    # Frontend typically sends UTC ISO string (e.g. "2026-03-01T10:30:00+00:00").
+    # to_sl_naive converts it to SL time (UTC+5:30) then strips timezone for MySQL.
+    if task_data.allocated_datetime:
+        allocated_datetime = to_sl_naive(task_data.allocated_datetime)
     else:
-        if task_data.title:
-            task.title = task_data.title
-        if task_data.description is not None:
-            task.description = task_data.description
-        if task_data.category:
-            task.category = task_data.category
-        if task_data.priority:
-            task.priority = task_data.priority
-        if task_data.due_date:
-            try:
-                task.due_date = datetime.fromisoformat(task_data.due_date.replace('Z', '+00:00'))
-            except:
-                pass
-        if task_data.status:
-            task.status = task_data.status
-            log_activity(db, task_id, current_user.id, current_user.name, "STATUS_CHANGED", f"Status changed to {task_data.status}")
-        if task_data.assigned_to:
-            assigned_user = db.query(User).filter(User.id == task_data.assigned_to).first()
-            if assigned_user:
-                task.assigned_to = task_data.assigned_to
-                task.assigned_to_name = assigned_user.name
-                if task.status == "CREATED":
-                    task.status = "ASSIGNED"
-                log_activity(db, task_id, current_user.id, current_user.name, "REASSIGNED", f"Task reassigned to {assigned_user.name}")
-                create_notification(db, task_data.assigned_to, "TASK_ASSIGNED", "Task Assigned", f"You have been assigned: {task.title}", task_id)
-    
+        allocated_datetime = now_sl()
+
+    deadline = calculate_deadline(allocated_datetime, task_data.time_interval, task_data.time_unit)
+
+    task = Task(
+        title=task_data.title, description=task_data.description, category=task_data.category,
+        priority=(task_data.priority or "MEDIUM").upper(), task_type=(task_data.task_type or "INSTANT").upper(),
+        status="PENDING", time_interval=task_data.time_interval, time_unit=task_data.time_unit,
+        allocated_datetime=allocated_datetime, deadline=deadline,
+        recurrence_pattern=task_data.recurrence_pattern, recurrence_intervals=task_data.recurrence_intervals,
+        assigned_to=task_data.assigned_to, assigned_to_name=assigned_to_name,
+        created_by=current_user.id, created_by_name=current_user.name
+    )
+    db.add(task)
     db.commit()
+    db.refresh(task)
+
+    create_activity_log(db, task.id, current_user.id, current_user.name, "CREATED", f"Task created: {task.title}")
+
+    if task.assigned_to:
+        await create_notification(db, task.assigned_to, "TASK_ASSIGNED", "New Task Assigned",
+                                   f"You have been assigned: {task.title}", task.id)
+
+    await manager.broadcast_to_all({"type": "task_created", "data": task_to_response(task)})
     return task_to_response(task)
 
-@api_router.delete("/tasks/{task_id}")
-def delete_task(task_id: str, current_user: User = Depends(require_roles(["OWNER", "MANAGER"])), db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    db.query(TaskComment).filter(TaskComment.task_id == task_id).delete()
-    db.query(TaskAttachment).filter(TaskAttachment.task_id == task_id).delete()
-    db.query(TaskActivityLog).filter(TaskActivityLog.task_id == task_id).delete()
-    db.query(Notification).filter(Notification.task_id == task_id).delete()
-    db.delete(task)
+# ===================== BULK DELETE =====================
+@api_router.post("/tasks/bulk-delete")
+@api_router.delete("/tasks/bulk-delete")
+async def bulk_delete_tasks(request: BulkDeleteRequest, db: Session = Depends(get_db),
+                            current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    task_ids = request.task_ids
+    db.query(Task).filter(Task.id.in_(task_ids)).update({"is_deleted": True}, synchronize_session=False)
     db.commit()
-    return {"message": "Task deleted successfully"}
+    await manager.broadcast_to_all({"type": "tasks_deleted", "data": {"ids": task_ids}})
+    return {"message": f"Deleted {len(task_ids)} tasks"}
 
-@api_router.post("/tasks/{task_id}/verify", response_model=TaskResponse)
-def verify_task(task_id: str, current_user: User = Depends(require_roles(["OWNER", "MANAGER"])), db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
+@api_router.get("/tasks/{task_id}")
+def get_task(task_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
+    return task_to_response(task)
+
+@api_router.put("/tasks/{task_id}")
+async def update_task(task_id: str, task_data: TaskUpdate, db: Session = Depends(get_db),
+                      current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    update_fields = task_data.dict(exclude_unset=True)
+
+    if "assigned_to" in update_fields and update_fields["assigned_to"]:
+        assigned_user = db.query(User).filter(User.id == update_fields["assigned_to"]).first()
+        if assigned_user:
+            task.assigned_to_name = assigned_user.name
+
+    # KEY FIX: Convert incoming allocated_datetime to naive SL time
+    if "allocated_datetime" in update_fields and update_fields["allocated_datetime"]:
+        update_fields["allocated_datetime"] = to_sl_naive(update_fields["allocated_datetime"])
+
+    # Recalculate deadline if any time-related field changed
+    if any(k in update_fields for k in ("time_interval", "time_unit", "allocated_datetime")):
+        allocated = update_fields.get("allocated_datetime", task.allocated_datetime)
+        interval = update_fields.get("time_interval", task.time_interval)
+        unit = update_fields.get("time_unit", task.time_unit)
+        task.deadline = calculate_deadline(allocated, interval, unit)
+
+    for key, value in update_fields.items():
+        if value is not None:
+            setattr(task, key, value)
+
+    db.commit()
+    db.refresh(task)
+    create_activity_log(db, task.id, current_user.id, current_user.name, "UPDATED", "Task updated")
+    await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
+    return task_to_response(task)
+
+@api_router.post("/tasks/{task_id}/start")
+async def start_task(task_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.status != "PENDING":
+        raise HTTPException(status_code=400, detail="Task can only be started from PENDING status")
+    if task.assigned_to and task.assigned_to != current_user.id:
+        raise HTTPException(status_code=403, detail="You are not assigned to this task")
+    task.status = "IN_PROGRESS"
+    task.started_at = now_sl()
+    db.commit()
+    db.refresh(task)
+    create_activity_log(db, task.id, current_user.id, current_user.name, "STARTED", "Task started")
+    await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
+    return task_to_response(task)
+
+@api_router.post("/tasks/{task_id}/complete")
+async def complete_task(task_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    if task.status not in ("IN_PROGRESS", "NOT_COMPLETED"):
+        raise HTTPException(status_code=400, detail="Task can only be completed from IN_PROGRESS or NOT_COMPLETED status")
+    if not task.proof_photos or len(task.proof_photos) == 0:
+        raise HTTPException(status_code=400, detail="Proof photo required before completing")
+
+    now = now_sl()
+    is_late = task.status == "NOT_COMPLETED" or task.is_overdue or (task.deadline and now > task.deadline)
+    actual_time = None
+    if task.started_at:
+        delta = now - task.started_at
+        actual_time = int(delta.total_seconds() / 60)
+
+    task.status = "COMPLETED"
+    task.completed_at = now
+    task.is_late = is_late
+    task.actual_time_taken = actual_time
+    db.commit()
+    db.refresh(task)
+
+    create_activity_log(db, task.id, current_user.id, current_user.name, "COMPLETED",
+                        f"Task {'completed (late)' if is_late else 'completed'}")
+    managers = db.query(User).filter(User.role.in_(["OWNER", "MANAGER"]), User.status == "ACTIVE").all()
+    late_msg = " (Late)" if is_late else ""
+    for mgr in managers:
+        await create_notification(db, mgr.id, "TASK_COMPLETED", "Task Completed",
+                                   f"Task '{task.title}' has been completed{late_msg} and is ready for verification", task.id)
+    await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
+    return task_to_response(task)
+
+@api_router.post("/tasks/{task_id}/verify")
+async def verify_task(task_id: str, db: Session = Depends(get_db),
+                      current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
     if task.status != "COMPLETED":
         raise HTTPException(status_code=400, detail="Only completed tasks can be verified")
-    
     task.status = "VERIFIED"
-    log_activity(db, task_id, current_user.id, current_user.name, "VERIFIED", "Task verified")
-    
-    if task.assigned_to:
-        create_notification(db, task.assigned_to, "TASK_VERIFIED", "Task Verified", f"Your task '{task.title}' has been verified", task_id)
-    
+    task.verified_at = now_sl()
+    task.verified_by = current_user.id
+    task.is_archived = True
+    task.archived_at = now_sl()
     db.commit()
+    db.refresh(task)
+    create_activity_log(db, task.id, current_user.id, current_user.name, "VERIFIED", "Task verified")
+    if task.assigned_to:
+        await create_notification(db, task.assigned_to, "TASK_VERIFIED", "Task Verified",
+                                   f"Your task '{task.title}' has been verified", task.id)
+    await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
     return task_to_response(task)
 
-# ============== COMMENTS ROUTES ==============
+@api_router.post("/tasks/{task_id}/proof")
+async def upload_proof(task_id: str, file: UploadFile = File(...), db: Session = Depends(get_db),
+                       current_user: User = Depends(get_current_user)):
+    task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    uploads_dir = ROOT_DIR / "uploads" / "proofs"
+    uploads_dir.mkdir(parents=True, exist_ok=True)
+    file_ext = Path(file.filename).suffix or ".jpg"
+    filename = f"{task_id}_{uuid.uuid4().hex[:8]}{file_ext}"
+    file_path = uploads_dir / filename
+    async with aiofiles.open(file_path, 'wb') as f:
+        content = await file.read()
+        await f.write(content)
+    proof_url = f"/api/uploads/proofs/{filename}"
+    proof_photos = task.proof_photos or []
+    proof_photos.append(proof_url)
+    task.proof_photos = proof_photos
+    db.commit()
+    db.refresh(task)
+    create_activity_log(db, task.id, current_user.id, current_user.name, "PROOF_UPLOADED", "Proof photo uploaded")
+    return {"message": "Proof uploaded", "url": proof_url, "task": task_to_response(task)}
+
+@api_router.delete("/tasks/{task_id}")
+async def delete_task(task_id: str, db: Session = Depends(get_db),
+                      current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))):
+    task = db.query(Task).filter(Task.id == task_id).first()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    task.is_deleted = True
+    db.commit()
+    await manager.broadcast_to_all({"type": "task_deleted", "data": {"id": task_id}})
+    return {"message": "Task deleted"}
+
+# ===================== REPORTS =====================
+@api_router.get("/reports/tasks")
+def get_task_reports(
+    status: str = None, category: str = None, priority: str = None, assigned_to: str = None,
+    date_from: str = None, date_to: str = None, include_archived: bool = True,
+    db: Session = Depends(get_db), current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))
+):
+    query = db.query(Task).filter(Task.is_deleted == False)
+    if not include_archived:
+        query = query.filter(Task.is_archived == False)
+    if status:
+        query = query.filter(Task.status == status)
+    if category:
+        query = query.filter(Task.category == category)
+    if priority:
+        query = query.filter(Task.priority == priority)
+    if assigned_to:
+        query = query.filter(Task.assigned_to == assigned_to)
+    if date_from:
+        try:
+            from_date = datetime.strptime(date_from, "%Y-%m-%d")
+            query = query.filter(Task.created_at >= from_date)
+        except ValueError:
+            pass
+    if date_to:
+        try:
+            to_date = datetime.strptime(date_to, "%Y-%m-%d") + timedelta(days=1)
+            query = query.filter(Task.created_at < to_date)
+        except ValueError:
+            pass
+    tasks = query.order_by(Task.created_at.desc()).all()
+    total = len(tasks)
+    return {
+        "tasks": [task_to_response(t) for t in tasks],
+        "summary": {
+            "total": total,
+            "verified": sum(1 for t in tasks if t.status == "VERIFIED"),
+            "completed": sum(1 for t in tasks if t.status == "COMPLETED"),
+            "late": sum(1 for t in tasks if t.is_late),
+            "overdue": sum(1 for t in tasks if t.is_overdue),
+            "pending": sum(1 for t in tasks if t.status == "PENDING"),
+            "in_progress": sum(1 for t in tasks if t.status == "IN_PROGRESS"),
+            "not_completed": sum(1 for t in tasks if t.status == "NOT_COMPLETED"),
+        }
+    }
+
+# ===================== TASK COMMENTS =====================
+@api_router.get("/tasks/{task_id}/comments", response_model=List[CommentResponse])
+def get_task_comments(task_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    comments = db.query(TaskComment).filter(TaskComment.task_id == task_id).order_by(TaskComment.created_at.desc()).all()
+    return [CommentResponse(id=c.id, task_id=c.task_id, user_id=c.user_id, user_name=c.user_name,
+                            content=c.content, created_at=c.created_at) for c in comments]
 
 @api_router.post("/tasks/{task_id}/comments", response_model=CommentResponse)
-def add_comment(task_id: str, comment_data: CommentCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
+async def add_task_comment(task_id: str, comment_data: CommentCreate, db: Session = Depends(get_db),
+                           current_user: User = Depends(get_current_user)):
+    task = db.query(Task).filter(Task.id == task_id, Task.is_deleted == False).first()
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
-    
-    if current_user.role == "STAFF" and task.assigned_to != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    comment = TaskComment(
-        id=str(uuid.uuid4()),
-        task_id=task_id,
-        user_id=current_user.id,
-        user_name=current_user.name,
-        content=comment_data.content
-    )
+    comment = TaskComment(task_id=task_id, user_id=current_user.id, user_name=current_user.name,
+                          content=comment_data.content)
     db.add(comment)
-    log_activity(db, task_id, current_user.id, current_user.name, "COMMENT_ADDED", f"Comment: {comment_data.content[:50]}...")
     db.commit()
-    
-    return CommentResponse(id=comment.id, task_id=comment.task_id, user_id=comment.user_id, user_name=comment.user_name, content=comment.content, created_at=comment.created_at.isoformat())
+    db.refresh(comment)
+    create_activity_log(db, task_id, current_user.id, current_user.name, "COMMENT_ADDED", comment_data.content[:100])
+    return CommentResponse(id=comment.id, task_id=comment.task_id, user_id=comment.user_id,
+                           user_name=comment.user_name, content=comment.content, created_at=comment.created_at)
 
-@api_router.get("/tasks/{task_id}/comments", response_model=List[CommentResponse])
-def get_comments(task_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    comments = db.query(TaskComment).filter(TaskComment.task_id == task_id).order_by(TaskComment.created_at.desc()).all()
-    return [CommentResponse(id=c.id, task_id=c.task_id, user_id=c.user_id, user_name=c.user_name or "", content=c.content, created_at=c.created_at.isoformat() if c.created_at else "") for c in comments]
-
-# ============== ACTIVITY LOG ROUTES ==============
-
-@api_router.get("/tasks/{task_id}/activity", response_model=List[ActivityLogResponse])
-def get_activity_log(task_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+# ===================== TASK ACTIVITY LOG =====================
+@api_router.get("/tasks/{task_id}/activity")
+def get_task_activity(task_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     logs = db.query(TaskActivityLog).filter(TaskActivityLog.task_id == task_id).order_by(TaskActivityLog.created_at.desc()).all()
-    return [ActivityLogResponse(id=l.id, task_id=l.task_id, user_id=l.user_id, user_name=l.user_name or "", action=l.action, details=l.details or "", created_at=l.created_at.isoformat() if l.created_at else "") for l in logs]
+    return [{"id": log.id, "task_id": log.task_id, "user_id": log.user_id, "user_name": log.user_name,
+             "action": log.action, "details": log.details, "created_at": log.created_at.isoformat()} for log in logs]
 
-# ============== ATTACHMENTS ROUTES ==============
-
-@api_router.post("/tasks/{task_id}/attachments")
-def upload_attachment(task_id: str, file: UploadFile = File(...), current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    task = db.query(Task).filter(Task.id == task_id).first()
-    if not task:
-        raise HTTPException(status_code=404, detail="Task not found")
-    
-    if current_user.role == "STAFF" and task.assigned_to != current_user.id:
-        raise HTTPException(status_code=403, detail="Access denied")
-    
-    upload_dir = ROOT_DIR / "uploads" / task_id
-    upload_dir.mkdir(parents=True, exist_ok=True)
-    
-    file_id = str(uuid.uuid4())
-    file_ext = Path(file.filename).suffix.lower()
-    file_path = upload_dir / f"{file_id}{file_ext}"
-    
-    content = file.file.read()
-    with open(file_path, 'wb') as f:
-        f.write(content)
-    
-    file_size = len(content)
-    thumbnail_path = None
-    
-    # Optimize if image
-    if file.content_type and file.content_type.startswith('image/'):
-        try:
-            optimized_path, thumb_path = optimize_image(file_path)
-            if optimized_path != file_path:
-                file_path.unlink(missing_ok=True)
-                file_path = optimized_path
-            thumbnail_path = str(thumb_path) if thumb_path else None
-        except Exception as e:
-            logger.error(f"Image optimization error: {e}")
-    
-    attachment = TaskAttachment(
-        id=file_id,
-        task_id=task_id,
-        filename=file.filename,
-        file_path=str(file_path),
-        content_type=file.content_type,
-        file_size=file_size,
-        thumbnail_path=thumbnail_path,
-        uploaded_by=current_user.id,
-        uploaded_by_name=current_user.name
-    )
-    db.add(attachment)
-    log_activity(db, task_id, current_user.id, current_user.name, "ATTACHMENT_ADDED", f"File '{file.filename}' uploaded")
-    db.commit()
-    
-    return {"id": file_id, "filename": file.filename, "message": "File uploaded successfully"}
-
-@api_router.get("/tasks/{task_id}/attachments", response_model=List[AttachmentResponse])
-def get_attachments(task_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    attachments = db.query(TaskAttachment).filter(TaskAttachment.task_id == task_id).all()
-    return [AttachmentResponse(
-        id=a.id,
-        task_id=a.task_id,
-        filename=a.filename,
-        content_type=a.content_type or "application/octet-stream",
-        file_size=a.file_size,
-        uploaded_by_name=a.uploaded_by_name or "",
-        created_at=a.created_at.isoformat() if a.created_at else "",
-        url=f"/api/attachments/{a.id}",
-        thumbnail_url=f"/api/attachments/{a.id}/thumbnail" if a.thumbnail_path else None
-    ) for a in attachments]
-
-@api_router.get("/attachments/{attachment_id}")
-def get_attachment_file(attachment_id: str, db: Session = Depends(get_db)):
-    attachment = db.query(TaskAttachment).filter(TaskAttachment.id == attachment_id).first()
-    if not attachment:
-        raise HTTPException(status_code=404, detail="Attachment not found")
-    
-    file_path = Path(attachment.file_path)
-    if not file_path.exists():
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    return FileResponse(path=file_path, filename=attachment.filename, media_type=attachment.content_type or "application/octet-stream")
-
-@api_router.get("/attachments/{attachment_id}/thumbnail")
-def get_attachment_thumbnail(attachment_id: str, db: Session = Depends(get_db)):
-    attachment = db.query(TaskAttachment).filter(TaskAttachment.id == attachment_id).first()
-    if not attachment or not attachment.thumbnail_path:
-        raise HTTPException(status_code=404, detail="Thumbnail not found")
-    
-    thumb_path = Path(attachment.thumbnail_path)
-    if not thumb_path.exists():
-        raise HTTPException(status_code=404, detail="Thumbnail file not found")
-    
-    return FileResponse(path=thumb_path, media_type="image/jpeg")
-
-# ============== NOTIFICATION ROUTES ==============
-
+# ===================== NOTIFICATIONS =====================
 @api_router.get("/notifications", response_model=List[NotificationResponse])
-def get_notifications(unread_only: bool = False, limit: int = 50, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    query = db.query(Notification).filter(Notification.user_id == current_user.id)
-    if unread_only:
-        query = query.filter(Notification.is_read == False)
-    notifications = query.order_by(Notification.created_at.desc()).limit(limit).all()
-    return [NotificationResponse(id=n.id, user_id=n.user_id, type=n.type, title=n.title, message=n.message or "", task_id=n.task_id, is_read=n.is_read, created_at=n.created_at.isoformat() if n.created_at else "") for n in notifications]
+def get_notifications(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    notifications = db.query(Notification).filter(Notification.user_id == current_user.id).order_by(Notification.created_at.desc()).limit(50).all()
+    return [NotificationResponse(id=n.id, type=n.type, title=n.title, message=n.message,
+                                  task_id=n.task_id, is_read=n.is_read, created_at=n.created_at) for n in notifications]
 
 @api_router.get("/notifications/unread-count")
-def get_unread_count(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_unread_count(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     count = db.query(Notification).filter(Notification.user_id == current_user.id, Notification.is_read == False).count()
     return {"count": count}
 
-@api_router.put("/notifications/{notification_id}/read")
-def mark_notification_read(notification_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    db.query(Notification).filter(Notification.id == notification_id, Notification.user_id == current_user.id).update({"is_read": True})
+@api_router.post("/notifications/mark-read")
+def mark_notifications_read(notification_ids: List[str] = None, db: Session = Depends(get_db),
+                             current_user: User = Depends(get_current_user)):
+    query = db.query(Notification).filter(Notification.user_id == current_user.id)
+    if notification_ids:
+        query = query.filter(Notification.id.in_(notification_ids))
+    query.update({"is_read": True}, synchronize_session=False)
     db.commit()
-    return {"message": "Notification marked as read"}
+    return {"message": "Notifications marked as read"}
 
+@api_router.post("/notifications/mark-all-read")
 @api_router.put("/notifications/read-all")
-def mark_all_notifications_read(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    db.query(Notification).filter(Notification.user_id == current_user.id, Notification.is_read == False).update({"is_read": True})
+def mark_all_notifications_read(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    db.query(Notification).filter(Notification.user_id == current_user.id).update({"is_read": True}, synchronize_session=False)
     db.commit()
     return {"message": "All notifications marked as read"}
 
-# ============== DASHBOARD ROUTES ==============
+@api_router.put("/notifications/{notification_id}/read")
+def mark_single_notification_read(notification_id: str, db: Session = Depends(get_db),
+                                   current_user: User = Depends(get_current_user)):
+    notification = db.query(Notification).filter(Notification.id == notification_id,
+                                                   Notification.user_id == current_user.id).first()
+    if not notification:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    notification.is_read = True
+    db.commit()
+    return {"message": "Notification marked as read"}
 
+# ===================== DASHBOARD =====================
 @api_router.get("/dashboard/stats", response_model=DashboardStats)
-def get_dashboard_stats(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    query = db.query(Task)
-    
+def get_dashboard_stats(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    base_query = db.query(Task).filter(Task.is_deleted == False)
     if current_user.role == "STAFF":
-        query = query.filter(Task.assigned_to == current_user.id)
-    
-    total_tasks = query.count()
-    in_progress = query.filter(Task.status == "IN_PROGRESS").count()
-    completed = db.query(Task).filter(Task.status == "COMPLETED").count() if current_user.role == "STAFF" else query.filter(Task.status == "COMPLETED").count()
-    verified = query.filter(Task.status == "VERIFIED").count()
-    
-    stats = DashboardStats(total_tasks=total_tasks, in_progress=in_progress, completed=completed, verified=verified)
-    
-    if current_user.role in ["OWNER", "MANAGER"]:
-        stats.tasks_to_assign = db.query(Task).filter(Task.status == "CREATED").count()
-        stats.tasks_to_verify = db.query(Task).filter(Task.status == "COMPLETED").count()
-        stats.total_staff = db.query(User).filter(User.role == "STAFF", User.status == "ACTIVE").count()
-    
-    return stats
+        base_query = base_query.filter(Task.assigned_to == current_user.id)
+    total_tasks = base_query.count()
+    in_progress = base_query.filter(Task.status == "IN_PROGRESS").count()
+    completed = base_query.filter(Task.status == "COMPLETED").count()
+    verified = base_query.filter(Task.status == "VERIFIED").count()
+    tasks_to_assign = db.query(Task).filter(Task.is_deleted == False, Task.assigned_to == None).count()
+    tasks_to_verify = db.query(Task).filter(Task.is_deleted == False, Task.status == "COMPLETED").count()
+    staff_count = db.query(User).filter(User.role.in_(["STAFF", "MANAGER"]), User.status == "ACTIVE").count()
+    return DashboardStats(total_tasks=total_tasks, in_progress=in_progress, completed=completed,
+                          verified=verified, tasks_to_assign=tasks_to_assign,
+                          tasks_to_verify=tasks_to_verify, staff_count=staff_count)
 
-# ============== SEED DATA ==============
+# ===================== FILE SERVING =====================
+@api_router.get("/uploads/proofs/{filename}")
+async def serve_proof_file(filename: str):
+    file_path = ROOT_DIR / "uploads" / "proofs" / filename
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found")
+    return FileResponse(file_path)
 
+# ===================== WEBSOCKET =====================
+@api_router.websocket("/ws/{token}")
+async def websocket_endpoint(websocket: WebSocket, token: str, db: Session = Depends(get_db)):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            await websocket.close(code=4001)
+            return
+    except JWTError:
+        await websocket.close(code=4001)
+        return
+    await manager.connect(websocket, user_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            if data == "ping":
+                await websocket.send_text("pong")
+    except WebSocketDisconnect:
+        manager.disconnect(websocket, user_id)
+    except Exception as e:
+        logger.error(f"WebSocket error for user {user_id}: {e}")
+        manager.disconnect(websocket, user_id)
+
+# ===================== SEED DATA =====================
 @api_router.post("/seed")
 def seed_data(db: Session = Depends(get_db)):
-    existing_owner = db.query(User).filter(User.email == "owner@zomoto.lk").first()
-    if existing_owner:
-        return {"message": "Data already seeded"}
-    
-    users = [
-        User(id=str(uuid.uuid4()), name="Restaurant Owner", email="owner@zomoto.lk", phone="0771234567", password=get_password_hash("123456"), role="OWNER", status="ACTIVE", employee_id="EMP001"),
-        User(id=str(uuid.uuid4()), name="Restaurant Manager", email="manager@zomoto.lk", phone="0772345678", password=get_password_hash("123456"), role="MANAGER", status="ACTIVE", employee_id="EMP002", salary_type="MONTHLY", basic_salary=50000),
-        User(id=str(uuid.uuid4()), name="Staff Member", email="staff@zomoto.lk", phone="0773456789", password=get_password_hash("123456"), role="STAFF", status="ACTIVE", employee_id="EMP003", salary_type="MONTHLY", basic_salary=30000),
+    if db.query(User).filter(User.email == "owner@zomoto.lk").first():
+        return {"message": "Already seeded"}
+    users_data = [
+        {"name": "Restaurant Owner", "email": "owner@zomoto.lk", "phone": "0771234567", "role": "OWNER"},
+        {"name": "Manager", "email": "manager@zomoto.lk", "phone": "0771234568", "role": "MANAGER"},
+        {"name": "Staff Member", "email": "staff@zomoto.lk", "phone": "0771234569", "role": "STAFF"},
     ]
-    for u in users:
-        db.add(u)
-    
-    templates = [
-        TaskTemplate(id=str(uuid.uuid4()), name="Clean Kitchen", name_lower="clean kitchen", default_category="Cleaning", default_priority="HIGH"),
-        TaskTemplate(id=str(uuid.uuid4()), name="Stock Check", name_lower="stock check", default_category="Kitchen", default_priority="MEDIUM"),
-        TaskTemplate(id=str(uuid.uuid4()), name="Equipment Maintenance", name_lower="equipment maintenance", default_category="Maintenance", default_priority="HIGH"),
-        TaskTemplate(id=str(uuid.uuid4()), name="Table Setup", name_lower="table setup", default_category="Other", default_priority="MEDIUM"),
-        TaskTemplate(id=str(uuid.uuid4()), name="Floor Mopping", name_lower="floor mopping", default_category="Cleaning", default_priority="LOW"),
+    for u in users_data:
+        user = User(name=u["name"], email=u["email"], phone=u["phone"], role=u["role"],
+                    hashed_password=get_password_hash("123456"))
+        db.add(user)
+    categories_data = [
+        {"name": "Kitchen", "color": "#EF4444"}, {"name": "Cleaning", "color": "#3B82F6"},
+        {"name": "Maintenance", "color": "#F59E0B"}, {"name": "Other", "color": "#6B7280"},
     ]
-    for t in templates:
-        db.add(t)
-    
+    for c in categories_data:
+        db.add(Category(name=c["name"], color=c["color"]))
     db.commit()
-    return {"message": "Seed data created successfully", "users": ["owner@zomoto.lk", "manager@zomoto.lk", "staff@zomoto.lk"], "password": "123456"}
+    return {"message": "Database seeded successfully"}
 
-# ============== HEALTH CHECK ==============
+# ===================== BACKGROUND TASKS =====================
+async def check_overdue_tasks():
+    """Check for overdue tasks. All datetimes are naive SL — same reference as DB."""
+    while True:
+        try:
+            db = SessionLocal()
+            now = now_sl()
+            overdue_tasks = db.query(Task).filter(
+                Task.is_deleted == False,
+                Task.status == "IN_PROGRESS",
+                Task.deadline < now,
+                Task.is_overdue == False
+            ).all()
+            for task in overdue_tasks:
+                task.is_overdue = True
+                task.status = "NOT_COMPLETED"
+                if task.assigned_to:
+                    db.add(Notification(user_id=task.assigned_to, type="TASK_OVERDUE",
+                                        title="Task Overdue",
+                                        message=f"Task '{task.title}' has exceeded its deadline",
+                                        task_id=task.id))
+            db.commit()
+            db.close()
+        except Exception as e:
+            logger.error(f"Error checking overdue tasks: {e}")
+        await asyncio.sleep(60)
 
-@api_router.get("/health")
-def health_check():
-    return {"status": "healthy", "database": "MySQL", "timestamp": datetime.now(timezone.utc).isoformat()}
+def parse_day_intervals(day_intervals_str: str) -> set:
+    days = set()
+    if not day_intervals_str:
+        return days
+    for part in day_intervals_str.split(","):
+        part = part.strip()
+        if "-" in part:
+            try:
+                start, end = part.split("-", 1)
+                for d in range(int(start.strip()), int(end.strip()) + 1):
+                    if 1 <= d <= 31:
+                        days.add(d)
+            except ValueError:
+                continue
+        else:
+            try:
+                d = int(part)
+                if 1 <= d <= 31:
+                    days.add(d)
+            except ValueError:
+                continue
+    return days
 
-# Include router
+async def generate_recurring_tasks():
+    """Background job: generate task instances from active recurring templates.
+    allocated_time in templates is 'HH:MM' in SL time — combined with today's SL date."""
+    while True:
+        try:
+            db = SessionLocal()
+            now = now_sl()
+            today = now.date()
+            today_day = today.day
+
+            templates = db.query(TaskTemplate).filter(
+                TaskTemplate.is_recurring == True,
+                TaskTemplate.is_active == True
+            ).all()
+
+            for tmpl in templates:
+                scheduled_days = parse_day_intervals(tmpl.day_intervals)
+                if not scheduled_days or today_day not in scheduled_days:
+                    continue
+                today_start = datetime.combine(today, datetime.min.time())
+                today_end = datetime.combine(today, datetime.max.time())
+                existing = db.query(Task).filter(
+                    Task.template_id == tmpl.id,
+                    Task.created_at >= today_start,
+                    Task.created_at <= today_end,
+                    Task.is_deleted == False
+                ).first()
+                if existing:
+                    continue
+
+                task = _build_task_from_template(tmpl, today, now)
+                db.add(task)
+                logger.info(f"Generated recurring task: {task.title} from template {tmpl.id}")
+
+                if tmpl.assigned_to:
+                    db.add(Notification(user_id=tmpl.assigned_to, type="TASK_ASSIGNED",
+                                        title="New Recurring Task",
+                                        message=f"Recurring task '{task.title}' has been assigned to you",
+                                        task_id=task.id))
+            db.commit()
+            db.close()
+        except Exception as e:
+            logger.error(f"Error generating recurring tasks: {e}")
+        await asyncio.sleep(300)
+
+# ===================== APP STARTUP =====================
+@app.on_event("startup")
+async def startup_event():
+    logger.info("Starting Zomoto Tasks API with MySQL...")
+    seed_default_data()
+    asyncio.create_task(check_overdue_tasks())
+    asyncio.create_task(generate_recurring_tasks())
+
+def seed_default_data():
+    db = SessionLocal()
+    try:
+        default_users = [
+            {"name": "Owner", "email": "owner@zomoto.lk", "role": "OWNER", "password": "123456"},
+            {"name": "Manager", "email": "manager@zomoto.lk", "role": "MANAGER", "password": "123456"},
+            {"name": "Staff", "email": "staff@zomoto.lk", "role": "STAFF", "password": "123456"},
+        ]
+        for u in default_users:
+            if not db.query(User).filter(User.email == u["email"]).first():
+                db.add(User(name=u["name"], email=u["email"], role=u["role"],
+                            hashed_password=get_password_hash(u["password"])))
+                logger.info(f"Seeded user: {u['email']}")
+        default_categories = [
+            {"name": "Kitchen", "color": "#EF4444"}, {"name": "Cleaning", "color": "#3B82F6"},
+            {"name": "Maintenance", "color": "#F59E0B"}, {"name": "Other", "color": "#6B7280"},
+        ]
+        for c in default_categories:
+            if not db.query(Category).filter(Category.name == c["name"]).first():
+                db.add(Category(name=c["name"], color=c["color"]))
+                logger.info(f"Seeded category: {c['name']}")
+        db.commit()
+    except Exception as e:
+        logger.error(f"Error seeding data: {e}")
+        db.rollback()
+    finally:
+        db.close()
+
+# Include API router
 app.include_router(api_router)
 
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
+    allow_origins=["*"],
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+@app.get("/")
+def health_check():
+    return {"status": "healthy", "database": "MySQL", "version": "3.0.0"}

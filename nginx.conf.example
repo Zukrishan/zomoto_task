@@ -1,0 +1,72 @@
+# Zomoto Tasks - Nginx Configuration for Production
+# Place this file at /etc/nginx/sites-available/zomoto-tasks
+# Then: sudo ln -s /etc/nginx/sites-available/zomoto-tasks /etc/nginx/sites-enabled/
+# Then: sudo nginx -t && sudo systemctl reload nginx
+
+server {
+    listen 80;
+    server_name task.zomoto.lk;  # Change to your domain
+
+    # Redirect HTTP to HTTPS (uncomment after SSL setup)
+    # return 301 https://$server_name$request_uri;
+
+    # Frontend - serve React build
+    root /var/www/zomoto-tasks/frontend/build;
+    index index.html;
+
+    # API proxy to FastAPI backend
+    location /api/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        # IMPORTANT: Allow all HTTP methods (fixes "Method Not Allowed" for bulk-delete)
+        proxy_set_header Connection "";
+
+        # Increase timeouts for long operations
+        proxy_connect_timeout 60s;
+        proxy_send_timeout 60s;
+        proxy_read_timeout 60s;
+
+        # Allow large file uploads (proof photos)
+        client_max_body_size 50M;
+    }
+
+    # WebSocket proxy (fixes "Offline" status)
+    location /api/ws/ {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_read_timeout 86400s;  # Keep WebSocket alive for 24 hours
+        proxy_send_timeout 86400s;
+    }
+
+    # React Router - serve index.html for all non-file routes
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Static file caching
+    location ~* \.(js|css|png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot)$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+    }
+}
+
+# HTTPS Configuration (uncomment after running certbot)
+# server {
+#     listen 443 ssl http2;
+#     server_name task.zomoto.lk;
+#
+#     ssl_certificate /etc/letsencrypt/live/task.zomoto.lk/fullchain.pem;
+#     ssl_certificate_key /etc/letsencrypt/live/task.zomoto.lk/privkey.pem;
+#
+#     # ... copy all location blocks from above ...
+# }

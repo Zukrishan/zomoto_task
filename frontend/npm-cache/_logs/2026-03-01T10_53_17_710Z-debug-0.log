@@ -1,0 +1,673 @@
+0 verbose cli D:\node.exe C:\Users\NIMS\AppData\Roaming\npm\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.10.1
+2 info using node@v24.13.1
+3 silly config load:file:C:\Users\NIMS\AppData\Roaming\npm\node_modules\npm\npmrc
+4 silly config load:file:D:\zomoto\zomoto_task\frontend\.npmrc
+5 silly config load:file:C:\Users\NIMS\.npmrc
+6 silly config load:file:C:\Users\NIMS\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm install
+8 verbose argv "install"
+9 verbose logfile logs-max:10 dir:D:\zomoto\zomoto_task\frontend\npm-cache\_logs\2026-03-01T10_53_17_710Z-
+10 verbose logfile D:\zomoto\zomoto_task\frontend\npm-cache\_logs\2026-03-01T10_53_17_710Z-debug-0.log
+11 silly logfile start cleaning logs, removing 1 files
+12 silly packumentCache heap:2348810240 maxSize:587202560 maxEntrySize:293601280
+13 silly logfile done cleaning log files
+14 verbose shrinkwrap failed to load node_modules/.package-lock.json out of date, updated: node_modules
+15 silly idealTree buildDeps
+16 silly fetch manifest eslint@^6.0.0 || ^7.0.0 || ^8.0.0
+17 silly packumentCache full:https://registry.npmjs.org/eslint cache-miss
+18 http fetch GET 200 https://registry.npmjs.org/eslint 2914ms (cache revalidated)
+19 silly packumentCache full:https://registry.npmjs.org/eslint set size:1949507 disposed:false
+20 warn ERESOLVE overriding peer dependency {
+20 warn ERESOLVE   code: 'ERESOLVE',
+20 warn ERESOLVE   edge: {
+20 warn ERESOLVE     type: 'peer',
+20 warn ERESOLVE     name: 'eslint',
+20 warn ERESOLVE     spec: '^6.0.0 || ^7.0.0 || ^8.0.0',
+20 warn ERESOLVE     error: 'INVALID',
+20 warn ERESOLVE     from: {
+20 warn ERESOLVE       name: '@typescript-eslint/eslint-plugin',
+20 warn ERESOLVE       version: '5.62.0',
+20 warn ERESOLVE       location: 'node_modules/@typescript-eslint/eslint-plugin',
+20 warn ERESOLVE       isWorkspace: false,
+20 warn ERESOLVE       dependents: [Array]
+20 warn ERESOLVE     }
+20 warn ERESOLVE   },
+20 warn ERESOLVE   dep: {
+20 warn ERESOLVE     name: 'eslint',
+20 warn ERESOLVE     version: '8.57.1',
+20 warn ERESOLVE     whileInstalling: {
+20 warn ERESOLVE       name: '@typescript-eslint/eslint-plugin',
+20 warn ERESOLVE       version: '5.62.0',
+20 warn ERESOLVE       path: 'D:\\zomoto\\zomoto_task\\frontend\\node_modules\\@typescript-eslint\\eslint-plugin'
+20 warn ERESOLVE     },
+20 warn ERESOLVE     location: 'node_modules/eslint',
+20 warn ERESOLVE     isWorkspace: false,
+20 warn ERESOLVE     dependents: [ [Object] ]
+20 warn ERESOLVE   },
+20 warn ERESOLVE   force: false,
+20 warn ERESOLVE   isMine: false,
+20 warn ERESOLVE   strictPeerDeps: false,
+20 warn ERESOLVE   current: {
+20 warn ERESOLVE     name: 'eslint',
+20 warn ERESOLVE     version: '9.23.0',
+20 warn ERESOLVE     location: 'node_modules/eslint',
+20 warn ERESOLVE     isWorkspace: false,
+20 warn ERESOLVE     dependents: [
+20 warn ERESOLVE       [Object], [Object],
+20 warn ERESOLVE       [Object], [Object],
+20 warn ERESOLVE       [Object], [Object],
+20 warn ERESOLVE       [Object], [Object],
+20 warn ERESOLVE       [Object]
+20 warn ERESOLVE     ]
+20 warn ERESOLVE   },
+20 warn ERESOLVE   peerConflict: {
+20 warn ERESOLVE     current: {
+20 warn ERESOLVE       name: 'eslint',
+20 warn ERESOLVE       version: '9.23.0',
+20 warn ERESOLVE       location: 'node_modules/eslint',
+20 warn ERESOLVE       isWorkspace: false,
+20 warn ERESOLVE       dependents: [Array]
+20 warn ERESOLVE     },
+20 warn ERESOLVE     peer: {
+20 warn ERESOLVE       name: 'eslint',
+20 warn ERESOLVE       version: '8.57.1',
+20 warn ERESOLVE       whileInstalling: [Object],
+20 warn ERESOLVE       location: 'node_modules/eslint',
+20 warn ERESOLVE       isWorkspace: false,
+20 warn ERESOLVE       dependents: [Array]
+20 warn ERESOLVE     }
+20 warn ERESOLVE   }
+20 warn ERESOLVE }
+21 warn ERESOLVE overriding peer dependency {
+21 warn ERESOLVE   code: 'ERESOLVE',
+21 warn ERESOLVE   edge: {
+21 warn ERESOLVE     type: 'peer',
+21 warn ERESOLVE     name: 'eslint',
+21 warn ERESOLVE     spec: '^6.0.0 || ^7.0.0 || ^8.0.0',
+21 warn ERESOLVE     error: 'INVALID',
+21 warn ERESOLVE     from: {
+21 warn ERESOLVE       name: '@typescript-eslint/experimental-utils',
+21 warn ERESOLVE       version: '5.62.0',
+21 warn ERESOLVE       location: 'node_modules/@typescript-eslint/experimental-utils',
+21 warn ERESOLVE       isWorkspace: false,
+21 warn ERESOLVE       dependents: [Array]
+21 warn ERESOLVE     }
+21 warn ERESOLVE   },
+21 warn ERESOLVE   dep: {
+21 warn ERESOLVE     name: 'eslint',
+21 warn ERESOLVE     version: '8.57.1',
+21 warn ERESOLVE     whileInstalling: {
+21 warn ERESOLVE       name: '@typescript-eslint/experimental-utils',
+21 warn ERESOLVE       version: '5.62.0',
+21 warn ERESOLVE       path: 'D:\\zomoto\\zomoto_task\\frontend\\node_modules\\@typescript-eslint\\experimental-utils'
+21 warn ERESOLVE     },
+21 warn ERESOLVE     location: 'node_modules/eslint',
+21 warn ERESOLVE     isWorkspace: false,
+21 warn ERESOLVE     dependents: [ [Object] ]
+21 warn ERESOLVE   },
+21 warn ERESOLVE   force: false,
+21 warn ERESOLVE   isMine: false,
+21 warn ERESOLVE   strictPeerDeps: false,
+21 warn ERESOLVE   current: {
+21 warn ERESOLVE     name: 'eslint',
+21 warn ERESOLVE     version: '9.23.0',
+21 warn ERESOLVE     location: 'node_modules/eslint',
+21 warn ERESOLVE     isWorkspace: false,
+21 warn ERESOLVE     dependents: [
+21 warn ERESOLVE       [Object], [Object],
+21 warn ERESOLVE       [Object], [Object],
+21 warn ERESOLVE       [Object], [Object],
+21 warn ERESOLVE       [Object], [Object],
+21 warn ERESOLVE       [Object]
+21 warn ERESOLVE     ]
+21 warn ERESOLVE   },
+21 warn ERESOLVE   peerConflict: {
+21 warn ERESOLVE     current: {
+21 warn ERESOLVE       name: 'eslint',
+21 warn ERESOLVE       version: '9.23.0',
+21 warn ERESOLVE       location: 'node_modules/eslint',
+21 warn ERESOLVE       isWorkspace: false,
+21 warn ERESOLVE       dependents: [Array]
+21 warn ERESOLVE     },
+21 warn ERESOLVE     peer: {
+21 warn ERESOLVE       name: 'eslint',
+21 warn ERESOLVE       version: '8.57.1',
+21 warn ERESOLVE       whileInstalling: [Object],
+21 warn ERESOLVE       location: 'node_modules/eslint',
+21 warn ERESOLVE       isWorkspace: false,
+21 warn ERESOLVE       dependents: [Array]
+21 warn ERESOLVE     }
+21 warn ERESOLVE   }
+21 warn ERESOLVE }
+22 warn ERESOLVE overriding peer dependency {
+22 warn ERESOLVE   code: 'ERESOLVE',
+22 warn ERESOLVE   edge: {
+22 warn ERESOLVE     type: 'peer',
+22 warn ERESOLVE     name: 'eslint',
+22 warn ERESOLVE     spec: '^6.0.0 || ^7.0.0 || ^8.0.0',
+22 warn ERESOLVE     error: 'INVALID',
+22 warn ERESOLVE     from: {
+22 warn ERESOLVE       name: '@typescript-eslint/parser',
+22 warn ERESOLVE       version: '5.62.0',
+22 warn ERESOLVE       location: 'node_modules/@typescript-eslint/parser',
+22 warn ERESOLVE       isWorkspace: false,
+22 warn ERESOLVE       dependents: [Array]
+22 warn ERESOLVE     }
+22 warn ERESOLVE   },
+22 warn ERESOLVE   dep: {
+22 warn ERESOLVE     name: 'eslint',
+22 warn ERESOLVE     version: '8.57.1',
+22 warn ERESOLVE     whileInstalling: {
+22 warn ERESOLVE       name: '@typescript-eslint/parser',
+22 warn ERESOLVE       version: '5.62.0',
+22 warn ERESOLVE       path: 'D:\\zomoto\\zomoto_task\\frontend\\node_modules\\@typescript-eslint\\parser'
+22 warn ERESOLVE     },
+22 warn ERESOLVE     location: 'node_modules/eslint',
+22 warn ERESOLVE     isWorkspace: false,
+22 warn ERESOLVE     dependents: [ [Object] ]
+22 warn ERESOLVE   },
+22 warn ERESOLVE   force: false,
+22 warn ERESOLVE   isMine: false,
+22 warn ERESOLVE   strictPeerDeps: false,
+22 warn ERESOLVE   current: {
+22 warn ERESOLVE     name: 'eslint',
+22 warn ERESOLVE     version: '9.23.0',
+22 warn ERESOLVE     location: 'node_modules/eslint',
+22 warn ERESOLVE     isWorkspace: false,
+22 warn ERESOLVE     dependents: [
+22 warn ERESOLVE       [Object], [Object],
+22 warn ERESOLVE       [Object], [Object],
+22 warn ERESOLVE       [Object], [Object],
+22 warn ERESOLVE       [Object], [Object],
+22 warn ERESOLVE       [Object]
+22 warn ERESOLVE     ]
+22 warn ERESOLVE   },
+22 warn ERESOLVE   peerConflict: {
+22 warn ERESOLVE     current: {
+22 warn ERESOLVE       name: 'eslint',
+22 warn ERESOLVE       version: '9.23.0',
+22 warn ERESOLVE       location: 'node_modules/eslint',
+22 warn ERESOLVE       isWorkspace: false,
+22 warn ERESOLVE       dependents: [Array]
+22 warn ERESOLVE     },
+22 warn ERESOLVE     peer: {
+22 warn ERESOLVE       name: 'eslint',
+22 warn ERESOLVE       version: '8.57.1',
+22 warn ERESOLVE       whileInstalling: [Object],
+22 warn ERESOLVE       location: 'node_modules/eslint',
+22 warn ERESOLVE       isWorkspace: false,
+22 warn ERESOLVE       dependents: [Array]
+22 warn ERESOLVE     }
+22 warn ERESOLVE   }
+22 warn ERESOLVE }
+23 warn ERESOLVE overriding peer dependency {
+23 warn ERESOLVE   code: 'ERESOLVE',
+23 warn ERESOLVE   edge: {
+23 warn ERESOLVE     type: 'peer',
+23 warn ERESOLVE     name: 'eslint',
+23 warn ERESOLVE     spec: '^6.0.0 || ^7.0.0 || ^8.0.0',
+23 warn ERESOLVE     error: 'INVALID',
+23 warn ERESOLVE     from: {
+23 warn ERESOLVE       name: '@typescript-eslint/utils',
+23 warn ERESOLVE       version: '5.62.0',
+23 warn ERESOLVE       location: 'node_modules/@typescript-eslint/utils',
+23 warn ERESOLVE       isWorkspace: false,
+23 warn ERESOLVE       dependents: [Array]
+23 warn ERESOLVE     }
+23 warn ERESOLVE   },
+23 warn ERESOLVE   dep: {
+23 warn ERESOLVE     name: 'eslint',
+23 warn ERESOLVE     version: '8.57.1',
+23 warn ERESOLVE     whileInstalling: {
+23 warn ERESOLVE       name: '@typescript-eslint/utils',
+23 warn ERESOLVE       version: '5.62.0',
+23 warn ERESOLVE       path: 'D:\\zomoto\\zomoto_task\\frontend\\node_modules\\@typescript-eslint\\utils'
+23 warn ERESOLVE     },
+23 warn ERESOLVE     location: 'node_modules/eslint',
+23 warn ERESOLVE     isWorkspace: false,
+23 warn ERESOLVE     dependents: [ [Object] ]
+23 warn ERESOLVE   },
+23 warn ERESOLVE   force: false,
+23 warn ERESOLVE   isMine: false,
+23 warn ERESOLVE   strictPeerDeps: false,
+23 warn ERESOLVE   current: {
+23 warn ERESOLVE     name: 'eslint',
+23 warn ERESOLVE     version: '9.23.0',
+23 warn ERESOLVE     location: 'node_modules/eslint',
+23 warn ERESOLVE     isWorkspace: false,
+23 warn ERESOLVE     dependents: [
+23 warn ERESOLVE       [Object], [Object],
+23 warn ERESOLVE       [Object], [Object],
+23 warn ERESOLVE       [Object], [Object],
+23 warn ERESOLVE       [Object], [Object],
+23 warn ERESOLVE       [Object]
+23 warn ERESOLVE     ]
+23 warn ERESOLVE   },
+23 warn ERESOLVE   peerConflict: {
+23 warn ERESOLVE     current: {
+23 warn ERESOLVE       name: 'eslint',
+23 warn ERESOLVE       version: '9.23.0',
+23 warn ERESOLVE       location: 'node_modules/eslint',
+23 warn ERESOLVE       isWorkspace: false,
+23 warn ERESOLVE       dependents: [Array]
+23 warn ERESOLVE     },
+23 warn ERESOLVE     peer: {
+23 warn ERESOLVE       name: 'eslint',
+23 warn ERESOLVE       version: '8.57.1',
+23 warn ERESOLVE       whileInstalling: [Object],
+23 warn ERESOLVE       location: 'node_modules/eslint',
+23 warn ERESOLVE       isWorkspace: false,
+23 warn ERESOLVE       dependents: [Array]
+23 warn ERESOLVE     }
+23 warn ERESOLVE   }
+23 warn ERESOLVE }
+24 silly fetch manifest typescript@>=3
+25 silly packumentCache full:https://registry.npmjs.org/typescript cache-miss
+26 http fetch GET 200 https://registry.npmjs.org/typescript 1003ms (cache miss)
+27 silly packumentCache full:https://registry.npmjs.org/typescript set size:undefined disposed:false
+28 silly placeDep ROOT typescript@5.9.3 OK for: cosmiconfig-typescript-loader@1.0.9 want: >=3
+29 silly fetch manifest eslint@^8.0.0
+30 silly packumentCache full:https://registry.npmjs.org/eslint cache-miss
+31 http cache https://registry.npmjs.org/eslint 12ms (cache hit)
+32 silly packumentCache full:https://registry.npmjs.org/eslint set size:1949507 disposed:false
+33 warn ERESOLVE overriding peer dependency {
+33 warn ERESOLVE   code: 'ERESOLVE',
+33 warn ERESOLVE   edge: {
+33 warn ERESOLVE     type: 'peer',
+33 warn ERESOLVE     name: 'eslint',
+33 warn ERESOLVE     spec: '^8.0.0',
+33 warn ERESOLVE     error: 'INVALID',
+33 warn ERESOLVE     from: {
+33 warn ERESOLVE       name: 'eslint-config-react-app',
+33 warn ERESOLVE       version: '7.0.1',
+33 warn ERESOLVE       location: 'node_modules/eslint-config-react-app',
+33 warn ERESOLVE       isWorkspace: false,
+33 warn ERESOLVE       dependents: [Array]
+33 warn ERESOLVE     }
+33 warn ERESOLVE   },
+33 warn ERESOLVE   dep: {
+33 warn ERESOLVE     name: 'eslint',
+33 warn ERESOLVE     version: '8.57.1',
+33 warn ERESOLVE     whileInstalling: {
+33 warn ERESOLVE       name: 'eslint-config-react-app',
+33 warn ERESOLVE       version: '7.0.1',
+33 warn ERESOLVE       path: 'D:\\zomoto\\zomoto_task\\frontend\\node_modules\\eslint-config-react-app'
+33 warn ERESOLVE     },
+33 warn ERESOLVE     location: 'node_modules/eslint',
+33 warn ERESOLVE     isWorkspace: false,
+33 warn ERESOLVE     dependents: [ [Object] ]
+33 warn ERESOLVE   },
+33 warn ERESOLVE   force: false,
+33 warn ERESOLVE   isMine: false,
+33 warn ERESOLVE   strictPeerDeps: false,
+33 warn ERESOLVE   current: {
+33 warn ERESOLVE     name: 'eslint',
+33 warn ERESOLVE     version: '9.23.0',
+33 warn ERESOLVE     location: 'node_modules/eslint',
+33 warn ERESOLVE     isWorkspace: false,
+33 warn ERESOLVE     dependents: [
+33 warn ERESOLVE       [Object], [Object],
+33 warn ERESOLVE       [Object], [Object],
+33 warn ERESOLVE       [Object], [Object],
+33 warn ERESOLVE       [Object], [Object],
+33 warn ERESOLVE       [Object]
+33 warn ERESOLVE     ]
+33 warn ERESOLVE   },
+33 warn ERESOLVE   peerConflict: {
+33 warn ERESOLVE     current: {
+33 warn ERESOLVE       name: 'eslint',
+33 warn ERESOLVE       version: '9.23.0',
+33 warn ERESOLVE       location: 'node_modules/eslint',
+33 warn ERESOLVE       isWorkspace: false,
+33 warn ERESOLVE       dependents: [Array]
+33 warn ERESOLVE     },
+33 warn ERESOLVE     peer: {
+33 warn ERESOLVE       name: 'eslint',
+33 warn ERESOLVE       version: '8.57.1',
+33 warn ERESOLVE       whileInstalling: [Object],
+33 warn ERESOLVE       location: 'node_modules/eslint',
+33 warn ERESOLVE       isWorkspace: false,
+33 warn ERESOLVE       dependents: [Array]
+33 warn ERESOLVE     }
+33 warn ERESOLVE   }
+33 warn ERESOLVE }
+34 silly fetch manifest eslint@^8.1.0
+35 silly packumentCache full:https://registry.npmjs.org/eslint cache-miss
+36 http cache https://registry.npmjs.org/eslint 9ms (cache hit)
+37 silly packumentCache full:https://registry.npmjs.org/eslint set size:1949507 disposed:false
+38 warn ERESOLVE overriding peer dependency {
+38 warn ERESOLVE   code: 'ERESOLVE',
+38 warn ERESOLVE   edge: {
+38 warn ERESOLVE     type: 'peer',
+38 warn ERESOLVE     name: 'eslint',
+38 warn ERESOLVE     spec: '^8.1.0',
+38 warn ERESOLVE     error: 'INVALID',
+38 warn ERESOLVE     from: {
+38 warn ERESOLVE       name: 'eslint-plugin-flowtype',
+38 warn ERESOLVE       version: '8.0.3',
+38 warn ERESOLVE       location: 'node_modules/eslint-plugin-flowtype',
+38 warn ERESOLVE       isWorkspace: false,
+38 warn ERESOLVE       dependents: [Array]
+38 warn ERESOLVE     }
+38 warn ERESOLVE   },
+38 warn ERESOLVE   dep: {
+38 warn ERESOLVE     name: 'eslint',
+38 warn ERESOLVE     version: '8.57.1',
+38 warn ERESOLVE     whileInstalling: {
+38 warn ERESOLVE       name: 'eslint-plugin-flowtype',
+38 warn ERESOLVE       version: '8.0.3',
+38 warn ERESOLVE       path: 'D:\\zomoto\\zomoto_task\\frontend\\node_modules\\eslint-plugin-flowtype'
+38 warn ERESOLVE     },
+38 warn ERESOLVE     location: 'node_modules/eslint',
+38 warn ERESOLVE     isWorkspace: false,
+38 warn ERESOLVE     dependents: [ [Object] ]
+38 warn ERESOLVE   },
+38 warn ERESOLVE   force: false,
+38 warn ERESOLVE   isMine: false,
+38 warn ERESOLVE   strictPeerDeps: false,
+38 warn ERESOLVE   current: {
+38 warn ERESOLVE     name: 'eslint',
+38 warn ERESOLVE     version: '9.23.0',
+38 warn ERESOLVE     location: 'node_modules/eslint',
+38 warn ERESOLVE     isWorkspace: false,
+38 warn ERESOLVE     dependents: [
+38 warn ERESOLVE       [Object], [Object],
+38 warn ERESOLVE       [Object], [Object],
+38 warn ERESOLVE       [Object], [Object],
+38 warn ERESOLVE       [Object], [Object],
+38 warn ERESOLVE       [Object]
+38 warn ERESOLVE     ]
+38 warn ERESOLVE   },
+38 warn ERESOLVE   peerConflict: {
+38 warn ERESOLVE     current: {
+38 warn ERESOLVE       name: 'eslint',
+38 warn ERESOLVE       version: '9.23.0',
+38 warn ERESOLVE       location: 'node_modules/eslint',
+38 warn ERESOLVE       isWorkspace: false,
+38 warn ERESOLVE       dependents: [Array]
+38 warn ERESOLVE     },
+38 warn ERESOLVE     peer: {
+38 warn ERESOLVE       name: 'eslint',
+38 warn ERESOLVE       version: '8.57.1',
+38 warn ERESOLVE       whileInstalling: [Object],
+38 warn ERESOLVE       location: 'node_modules/eslint',
+38 warn ERESOLVE       isWorkspace: false,
+38 warn ERESOLVE       dependents: [Array]
+38 warn ERESOLVE     }
+38 warn ERESOLVE   }
+38 warn ERESOLVE }
+39 warn ERESOLVE overriding peer dependency {
+39 warn ERESOLVE   code: 'ERESOLVE',
+39 warn ERESOLVE   edge: {
+39 warn ERESOLVE     type: 'peer',
+39 warn ERESOLVE     name: 'eslint',
+39 warn ERESOLVE     spec: '^6.0.0 || ^7.0.0 || ^8.0.0',
+39 warn ERESOLVE     error: 'INVALID',
+39 warn ERESOLVE     from: {
+39 warn ERESOLVE       name: 'eslint-plugin-jest',
+39 warn ERESOLVE       version: '25.7.0',
+39 warn ERESOLVE       location: 'node_modules/eslint-plugin-jest',
+39 warn ERESOLVE       isWorkspace: false,
+39 warn ERESOLVE       dependents: [Array]
+39 warn ERESOLVE     }
+39 warn ERESOLVE   },
+39 warn ERESOLVE   dep: {
+39 warn ERESOLVE     name: 'eslint',
+39 warn ERESOLVE     version: '8.57.1',
+39 warn ERESOLVE     whileInstalling: {
+39 warn ERESOLVE       name: 'eslint-plugin-jest',
+39 warn ERESOLVE       version: '25.7.0',
+39 warn ERESOLVE       path: 'D:\\zomoto\\zomoto_task\\frontend\\node_modules\\eslint-plugin-jest'
+39 warn ERESOLVE     },
+39 warn ERESOLVE     location: 'node_modules/eslint',
+39 warn ERESOLVE     isWorkspace: false,
+39 warn ERESOLVE     dependents: [ [Object] ]
+39 warn ERESOLVE   },
+39 warn ERESOLVE   force: false,
+39 warn ERESOLVE   isMine: false,
+39 warn ERESOLVE   strictPeerDeps: false,
+39 warn ERESOLVE   current: {
+39 warn ERESOLVE     name: 'eslint',
+39 warn ERESOLVE     version: '9.23.0',
+39 warn ERESOLVE     location: 'node_modules/eslint',
+39 warn ERESOLVE     isWorkspace: false,
+39 warn ERESOLVE     dependents: [
+39 warn ERESOLVE       [Object], [Object],
+39 warn ERESOLVE       [Object], [Object],
+39 warn ERESOLVE       [Object], [Object],
+39 warn ERESOLVE       [Object], [Object],
+39 warn ERESOLVE       [Object]
+39 warn ERESOLVE     ]
+39 warn ERESOLVE   },
+39 warn ERESOLVE   peerConflict: {
+39 warn ERESOLVE     current: {
+39 warn ERESOLVE       name: 'eslint',
+39 warn ERESOLVE       version: '9.23.0',
+39 warn ERESOLVE       location: 'node_modules/eslint',
+39 warn ERESOLVE       isWorkspace: false,
+39 warn ERESOLVE       dependents: [Array]
+39 warn ERESOLVE     },
+39 warn ERESOLVE     peer: {
+39 warn ERESOLVE       name: 'eslint',
+39 warn ERESOLVE       version: '8.57.1',
+39 warn ERESOLVE       whileInstalling: [Object],
+39 warn ERESOLVE       location: 'node_modules/eslint',
+39 warn ERESOLVE       isWorkspace: false,
+39 warn ERESOLVE       dependents: [Array]
+39 warn ERESOLVE     }
+39 warn ERESOLVE   }
+39 warn ERESOLVE }
+40 silly fetch manifest eslint@^7.5.0 || ^8.0.0
+41 silly packumentCache full:https://registry.npmjs.org/eslint cache-miss
+42 http cache https://registry.npmjs.org/eslint 9ms (cache hit)
+43 silly packumentCache full:https://registry.npmjs.org/eslint set size:1949507 disposed:false
+44 warn ERESOLVE overriding peer dependency {
+44 warn ERESOLVE   code: 'ERESOLVE',
+44 warn ERESOLVE   edge: {
+44 warn ERESOLVE     type: 'peer',
+44 warn ERESOLVE     name: 'eslint',
+44 warn ERESOLVE     spec: '^7.5.0 || ^8.0.0',
+44 warn ERESOLVE     error: 'INVALID',
+44 warn ERESOLVE     from: {
+44 warn ERESOLVE       name: 'eslint-plugin-testing-library',
+44 warn ERESOLVE       version: '5.11.1',
+44 warn ERESOLVE       location: 'node_modules/eslint-plugin-testing-library',
+44 warn ERESOLVE       isWorkspace: false,
+44 warn ERESOLVE       dependents: [Array]
+44 warn ERESOLVE     }
+44 warn ERESOLVE   },
+44 warn ERESOLVE   dep: {
+44 warn ERESOLVE     name: 'eslint',
+44 warn ERESOLVE     version: '8.57.1',
+44 warn ERESOLVE     whileInstalling: {
+44 warn ERESOLVE       name: 'eslint-plugin-testing-library',
+44 warn ERESOLVE       version: '5.11.1',
+44 warn ERESOLVE       path: 'D:\\zomoto\\zomoto_task\\frontend\\node_modules\\eslint-plugin-testing-library'
+44 warn ERESOLVE     },
+44 warn ERESOLVE     location: 'node_modules/eslint',
+44 warn ERESOLVE     isWorkspace: false,
+44 warn ERESOLVE     dependents: [ [Object] ]
+44 warn ERESOLVE   },
+44 warn ERESOLVE   force: false,
+44 warn ERESOLVE   isMine: false,
+44 warn ERESOLVE   strictPeerDeps: false,
+44 warn ERESOLVE   current: {
+44 warn ERESOLVE     name: 'eslint',
+44 warn ERESOLVE     version: '9.23.0',
+44 warn ERESOLVE     location: 'node_modules/eslint',
+44 warn ERESOLVE     isWorkspace: false,
+44 warn ERESOLVE     dependents: [
+44 warn ERESOLVE       [Object], [Object],
+44 warn ERESOLVE       [Object], [Object],
+44 warn ERESOLVE       [Object], [Object],
+44 warn ERESOLVE       [Object], [Object],
+44 warn ERESOLVE       [Object]
+44 warn ERESOLVE     ]
+44 warn ERESOLVE   },
+44 warn ERESOLVE   peerConflict: {
+44 warn ERESOLVE     current: {
+44 warn ERESOLVE       name: 'eslint',
+44 warn ERESOLVE       version: '9.23.0',
+44 warn ERESOLVE       location: 'node_modules/eslint',
+44 warn ERESOLVE       isWorkspace: false,
+44 warn ERESOLVE       dependents: [Array]
+44 warn ERESOLVE     },
+44 warn ERESOLVE     peer: {
+44 warn ERESOLVE       name: 'eslint',
+44 warn ERESOLVE       version: '8.57.1',
+44 warn ERESOLVE       whileInstalling: [Object],
+44 warn ERESOLVE       location: 'node_modules/eslint',
+44 warn ERESOLVE       isWorkspace: false,
+44 warn ERESOLVE       dependents: [Array]
+44 warn ERESOLVE     }
+44 warn ERESOLVE   }
+44 warn ERESOLVE }
+45 silly fetch manifest eslint@^7.0.0 || ^8.0.0
+46 silly packumentCache full:https://registry.npmjs.org/eslint cache-miss
+47 http cache https://registry.npmjs.org/eslint 22ms (cache hit)
+48 silly packumentCache full:https://registry.npmjs.org/eslint set size:1949507 disposed:false
+49 warn ERESOLVE overriding peer dependency {
+49 warn ERESOLVE   code: 'ERESOLVE',
+49 warn ERESOLVE   edge: {
+49 warn ERESOLVE     type: 'peer',
+49 warn ERESOLVE     name: 'eslint',
+49 warn ERESOLVE     spec: '^7.0.0 || ^8.0.0',
+49 warn ERESOLVE     error: 'INVALID',
+49 warn ERESOLVE     from: {
+49 warn ERESOLVE       name: 'eslint-webpack-plugin',
+49 warn ERESOLVE       version: '3.2.0',
+49 warn ERESOLVE       location: 'node_modules/eslint-webpack-plugin',
+49 warn ERESOLVE       isWorkspace: false,
+49 warn ERESOLVE       dependents: [Array]
+49 warn ERESOLVE     }
+49 warn ERESOLVE   },
+49 warn ERESOLVE   dep: {
+49 warn ERESOLVE     name: 'eslint',
+49 warn ERESOLVE     version: '8.57.1',
+49 warn ERESOLVE     whileInstalling: {
+49 warn ERESOLVE       name: 'eslint-webpack-plugin',
+49 warn ERESOLVE       version: '3.2.0',
+49 warn ERESOLVE       path: 'D:\\zomoto\\zomoto_task\\frontend\\node_modules\\eslint-webpack-plugin'
+49 warn ERESOLVE     },
+49 warn ERESOLVE     location: 'node_modules/eslint',
+49 warn ERESOLVE     isWorkspace: false,
+49 warn ERESOLVE     dependents: [ [Object] ]
+49 warn ERESOLVE   },
+49 warn ERESOLVE   force: false,
+49 warn ERESOLVE   isMine: false,
+49 warn ERESOLVE   strictPeerDeps: false,
+49 warn ERESOLVE   current: {
+49 warn ERESOLVE     name: 'eslint',
+49 warn ERESOLVE     version: '9.23.0',
+49 warn ERESOLVE     location: 'node_modules/eslint',
+49 warn ERESOLVE     isWorkspace: false,
+49 warn ERESOLVE     dependents: [
+49 warn ERESOLVE       [Object], [Object],
+49 warn ERESOLVE       [Object], [Object],
+49 warn ERESOLVE       [Object], [Object],
+49 warn ERESOLVE       [Object], [Object],
+49 warn ERESOLVE       [Object]
+49 warn ERESOLVE     ]
+49 warn ERESOLVE   },
+49 warn ERESOLVE   peerConflict: {
+49 warn ERESOLVE     current: {
+49 warn ERESOLVE       name: 'eslint',
+49 warn ERESOLVE       version: '9.23.0',
+49 warn ERESOLVE       location: 'node_modules/eslint',
+49 warn ERESOLVE       isWorkspace: false,
+49 warn ERESOLVE       dependents: [Array]
+49 warn ERESOLVE     },
+49 warn ERESOLVE     peer: {
+49 warn ERESOLVE       name: 'eslint',
+49 warn ERESOLVE       version: '8.57.1',
+49 warn ERESOLVE       whileInstalling: [Object],
+49 warn ERESOLVE       location: 'node_modules/eslint',
+49 warn ERESOLVE       isWorkspace: false,
+49 warn ERESOLVE       dependents: [Array]
+49 warn ERESOLVE     }
+49 warn ERESOLVE   }
+49 warn ERESOLVE }
+50 silly fetch manifest picomatch@^3 || ^4
+51 silly packumentCache full:https://registry.npmjs.org/picomatch cache-miss
+52 http fetch GET 200 https://registry.npmjs.org/picomatch 157ms (cache revalidated)
+53 silly packumentCache full:https://registry.npmjs.org/picomatch set size:118818 disposed:false
+54 silly placeDep ROOT picomatch@4.0.3 REPLACE for: fdir@6.5.0 want: ^3 || ^4
+55 silly fetch manifest picomatch@^2.2.2
+56 silly packumentCache full:https://registry.npmjs.org/picomatch cache-hit
+57 silly placeDep node_modules/@rollup/pluginutils picomatch@2.3.1 OK for: @rollup/pluginutils@3.1.0 want: ^2.2.2
+58 silly fetch manifest picomatch@^2.0.4
+59 silly packumentCache full:https://registry.npmjs.org/picomatch cache-hit
+60 silly placeDep node_modules/anymatch picomatch@2.3.1 OK for: anymatch@3.1.3 want: ^2.0.4
+61 silly fetch manifest picomatch@^2.2.3
+62 silly packumentCache full:https://registry.npmjs.org/picomatch cache-hit
+63 silly placeDep node_modules/jest-util picomatch@2.3.1 OK for: jest-util@27.5.1 want: ^2.2.3
+64 silly fetch manifest picomatch@^2.3.1
+65 silly packumentCache full:https://registry.npmjs.org/picomatch cache-hit
+66 silly placeDep node_modules/micromatch picomatch@2.3.1 OK for: micromatch@4.0.8 want: ^2.3.1
+67 silly fetch manifest yaml@^2.4.2
+68 silly packumentCache full:https://registry.npmjs.org/yaml cache-miss
+69 http fetch GET 200 https://registry.npmjs.org/yaml 139ms (cache revalidated)
+70 silly packumentCache full:https://registry.npmjs.org/yaml set size:361552 disposed:false
+71 silly placeDep ROOT yaml@2.8.2 REPLACE for: postcss-load-config@6.0.1 want: ^2.4.2
+72 silly fetch manifest yaml@^1.10.0
+73 silly packumentCache full:https://registry.npmjs.org/yaml cache-hit
+74 silly placeDep node_modules/cosmiconfig yaml@1.10.2 OK for: cosmiconfig@7.1.0 want: ^1.10.0
+75 silly fetch manifest yaml@^1.10.2
+76 silly packumentCache full:https://registry.npmjs.org/yaml cache-hit
+77 silly placeDep node_modules/cssnano yaml@1.10.2 OK for: cssnano@5.1.15 want: ^1.10.2
+78 silly fetch manifest date-fns@^2.28.0 || ^3.0.0
+79 silly packumentCache full:https://registry.npmjs.org/date-fns cache-miss
+80 http fetch GET 200 https://registry.npmjs.org/date-fns 157ms (cache revalidated)
+81 silly packumentCache full:https://registry.npmjs.org/date-fns set size:3443779 disposed:false
+82 silly fetch manifest react@^16.8.0 || ^17.0.0 || ^18.0.0
+83 silly packumentCache full:https://registry.npmjs.org/react cache-miss
+84 http fetch GET 200 https://registry.npmjs.org/react 754ms (cache updated)
+85 silly packumentCache full:https://registry.npmjs.org/react set size:undefined disposed:false
+86 verbose stack Error: could not resolve
+86 verbose stack     at PlaceDep.failPeerConflict (C:\Users\NIMS\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\place-dep.js:503:25)
+86 verbose stack     at new PlaceDep (C:\Users\NIMS\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\place-dep.js:157:21)
+86 verbose stack     at #buildDepStep (C:\Users\NIMS\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:933:18)
+86 verbose stack     at async Arborist.buildIdealTree (C:\Users\NIMS\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\build-ideal-tree.js:170:7)
+86 verbose stack     at async Promise.all (index 1)
+86 verbose stack     at async Arborist.reify (C:\Users\NIMS\AppData\Roaming\npm\node_modules\npm\node_modules\@npmcli\arborist\lib\arborist\reify.js:110:5)
+86 verbose stack     at async Install.exec (C:\Users\NIMS\AppData\Roaming\npm\node_modules\npm\lib\commands\install.js:152:5)
+86 verbose stack     at async Npm.exec (C:\Users\NIMS\AppData\Roaming\npm\node_modules\npm\lib\npm.js:209:9)
+86 verbose stack     at async module.exports (C:\Users\NIMS\AppData\Roaming\npm\node_modules\npm\lib\cli\entry.js:67:5)
+87 error code ERESOLVE
+88 error ERESOLVE could not resolve
+89 error
+90 error While resolving: react-day-picker@8.10.1
+90 error Found: date-fns@4.1.0[2m[22m
+90 error [2mnode_modules/date-fns[22m
+90 error   date-fns@"^4.1.0" from the root project
+90 error
+90 error Could not resolve dependency:
+90 error [95mpeer[39m date-fns@"^2.28.0 || ^3.0.0" from react-day-picker@8.10.1[2m[22m
+90 error [2mnode_modules/react-day-picker[22m
+90 error   react-day-picker@"8.10.1" from the root project
+90 error
+90 error Conflicting peer dependency: date-fns@3.6.0[2m[22m
+90 error [2mnode_modules/date-fns[22m
+90 error   [95mpeer[39m date-fns@"^2.28.0 || ^3.0.0" from react-day-picker@8.10.1[2m[22m
+90 error   [2mnode_modules/react-day-picker[22m
+90 error     react-day-picker@"8.10.1" from the root project
+90 error
+90 error Fix the upstream dependency conflict, or retry
+90 error this command with --force or --legacy-peer-deps
+90 error to accept an incorrect (and potentially broken) dependency resolution.
+91 error
+91 error
+91 error For a full report see:
+91 error D:\zomoto\zomoto_task\frontend\npm-cache\_logs\2026-03-01T10_53_17_710Z-eresolve-report.txt
+92 silly unfinished npm timer reify 1772362412032
+93 silly unfinished npm timer reify:loadTrees 1772362412033
+94 silly unfinished npm timer idealTree:buildDeps 1772362413045
+95 silly unfinished npm timer idealTree:node_modules/react-day-picker 1772362417724
+96 verbose cwd D:\zomoto\zomoto_task\frontend
+97 verbose os Windows_NT 10.0.22631
+98 verbose node v24.13.1
+99 verbose npm  v11.10.1
+100 verbose exit 1
+101 verbose code 1
+102 error A complete log of this run can be found in: D:\zomoto\zomoto_task\frontend\npm-cache\_logs\2026-03-01T10_53_17_710Z-debug-0.log

@@ -1,0 +1,24 @@
+'Log files:
+D:\zomoto\zomoto_task\frontend\npm-cache\_logs\2026-03-01T10_53_17_710Z-debug-0.log
+
+# npm resolution error report
+
+While resolving: react-day-picker@8.10.1
+Found: date-fns@4.1.0
+node_modules/date-fns
+  date-fns@"^4.1.0" from the root project
+
+Could not resolve dependency:
+peer date-fns@"^2.28.0 || ^3.0.0" from react-day-picker@8.10.1
+node_modules/react-day-picker
+  react-day-picker@"8.10.1" from the root project
+
+Conflicting peer dependency: date-fns@3.6.0
+node_modules/date-fns
+  peer date-fns@"^2.28.0 || ^3.0.0" from react-day-picker@8.10.1
+  node_modules/react-day-picker
+    react-day-picker@"8.10.1" from the root project
+
+Fix the upstream dependency conflict, or retry
+this command with --force or --legacy-peer-deps
+to accept an incorrect (and potentially broken) dependency resolution.
