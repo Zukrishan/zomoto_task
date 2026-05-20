@@ -11,7 +11,24 @@ import {
   Square,
   Wifi,
   WifiOff,
+  GripVertical,
+  Shuffle,
+  Loader2,
 } from "lucide-react";
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  arrayMove,
+  useSortable,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
 import { useAuth } from "../context/AuthContext";
 import { useWebSocket, useWebSocketEvent } from "../context/WebSocketContext";
@@ -47,10 +64,42 @@ const PRIORITY_OPTIONS = [
   { value: "LOW", label: "Low" },
 ];
 
+function SortableTaskRow({ task, onTaskUpdate, currentUser, onLongPress, selectMode, onClick }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="flex items-start gap-2">
+      <button
+        {...attributes}
+        {...listeners}
+        className="mt-3 p-1 text-zinc-300 hover:text-zinc-500 cursor-grab active:cursor-grabbing touch-none flex-shrink-0"
+        data-testid={`drag-handle-${task.id}`}
+      >
+        <GripVertical className="h-5 w-5" />
+      </button>
+      <div className="flex-1">
+        <TaskCard
+          task={task}
+          onClick={onClick}
+          onTaskUpdate={onTaskUpdate}
+          currentUser={currentUser}
+          onLongPress={onLongPress}
+          selectMode={selectMode}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function TasksPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isOwner, isManager, user } = useAuth();
+  const isSupervisor = user?.role === "SUPERVISOR";
   const { isConnected } = useWebSocket();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,10 +107,13 @@ export default function TasksPage() {
   const [showFilters, setShowFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
+  const [isReorderMode, setIsReorderMode] = useState(false);
+
   // Multi-select state
   const [selectMode, setSelectMode] = useState(false);
   const [selectedTasks, setSelectedTasks] = useState(new Set());
   const [deleting, setDeleting] = useState(false);
+  const [autoAssigning, setAutoAssigning] = useState(false);
 
   const [categories, setCategories] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
@@ -352,6 +404,49 @@ export default function TasksPage() {
   useWebSocketEvent("tasks_deleted", handleTasksDeleted);
   useWebSocketEvent("recurring_task_activated", handleRecurringTaskActivated);
 
+  const sensors = useSensors(useSensor(PointerSensor, {
+    activationConstraint: { distance: 8 },
+  }));
+
+  const handleDragEnd = async ({ active, over }) => {
+    if (!over || active.id === over.id) return;
+    const oldIndex = tasks.findIndex((t) => t.id === active.id);
+    const newIndex = tasks.findIndex((t) => t.id === over.id);
+    const reordered = arrayMove(tasks, oldIndex, newIndex);
+    setTasks(reordered);
+    try {
+      await api.put("/tasks/reorder", reordered.map((t, i) => ({
+        id: t.id,
+        sort_order: (i + 1) * 10,
+      })));
+    } catch {
+      toast.error("Failed to save order");
+      fetchTasks();
+    }
+  };
+
+  useEffect(() => {
+    if (isReorderMode) {
+      // Load all tasks when entering reorder mode (bypass pagination)
+      (async () => {
+        try {
+          const params = new URLSearchParams();
+          if (filters.status !== "ALL") params.append("status", filters.status);
+          if (filters.category !== "ALL") params.append("category", filters.category);
+          if (filters.priority !== "ALL") params.append("priority", filters.priority);
+          params.append("limit", 500);
+          params.append("offset", 0);
+          const response = await api.get(`/tasks?${params.toString()}`);
+          setTasks(response.data.tasks);
+        } catch {
+          toast.error("Failed to load tasks for reorder");
+        }
+      })();
+    } else {
+      fetchTasks();
+    }
+  }, [isReorderMode]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filteredTasks = (tasks || []).filter(
     (task) =>
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -415,6 +510,24 @@ export default function TasksPage() {
     }
   };
 
+  const handleBulkAutoAssign = async () => {
+    if (selectedTasks.size === 0) return;
+    setAutoAssigning(true);
+    try {
+      const response = await api.post("/tasks/bulk-auto-assign", {
+        task_ids: Array.from(selectedTasks),
+      });
+      toast.success(response.data.message);
+      setSelectedTasks(new Set());
+      setSelectMode(false);
+      fetchTasks();
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Failed to auto-assign tasks"));
+    } finally {
+      setAutoAssigning(false);
+    }
+  };
+
   const isAllSelected =
     filteredTasks.length > 0 && selectedTasks.size === filteredTasks.length;
   const isSomeSelected =
@@ -454,8 +567,8 @@ export default function TasksPage() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* Select Mode Toggle - Hidden on mobile, shown on desktop (Owner/Manager only) */}
-            {(isOwner || isManager) && !selectMode && (
+            {/* Select Mode Toggle - Hidden on mobile, shown on desktop (Owner/Manager/Supervisor) */}
+            {(isOwner || isManager || isSupervisor) && !selectMode && (
               <Button
                 variant="outline"
                 onClick={() => setSelectMode(true)}
@@ -468,6 +581,19 @@ export default function TasksPage() {
             )}
 
             {(isOwner || isManager) && !selectMode && (
+              <Button
+                variant={isReorderMode ? "default" : "outline"}
+                size="sm"
+                onClick={() => setIsReorderMode((r) => !r)}
+                className={`h-10 px-3 rounded-full gap-1 ${isReorderMode ? "bg-zinc-800 text-white" : "border-zinc-200"}`}
+                data-testid="reorder-toggle-btn"
+              >
+                <GripVertical className="h-4 w-4" />
+                {isReorderMode ? "Done" : "Reorder"}
+              </Button>
+            )}
+
+            {(isOwner || isManager) && !selectMode && !isReorderMode && (
               <Button
                 onClick={() => setShowCreateTask(true)}
                 className="h-10 px-4 bg-[#E23744] hover:bg-[#C42B37] text-white rounded-full shadow-md"
@@ -518,7 +644,24 @@ export default function TasksPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {/* Delete Button */}
+              {/* Auto-assign Button */}
+              <Button
+                onClick={handleBulkAutoAssign}
+                disabled={selectedTasks.size === 0 || autoAssigning}
+                className="h-9 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-full disabled:opacity-50 gap-1"
+                data-testid="bulk-auto-assign-btn"
+              >
+                {autoAssigning ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Shuffle className="h-4 w-4" />
+                )}
+                <span className="hidden sm:inline">Auto-assign</span>
+                <span>({selectedTasks.size})</span>
+              </Button>
+
+              {/* Delete Button - Owner/Manager only */}
+              {(isOwner || isManager) && (
               <Button
                 onClick={handleBulkDelete}
                 disabled={selectedTasks.size === 0 || deleting}
@@ -532,6 +675,7 @@ export default function TasksPage() {
                 )}
                 Delete ({selectedTasks.size})
               </Button>
+              )}
 
               {/* Cancel Button */}
               <Button
@@ -639,6 +783,25 @@ export default function TasksPage() {
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#E23744]"></div>
           </div>
         ) : filteredTasks.length > 0 ? (
+          isReorderMode && (isOwner || isManager) ? (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+              <SortableContext items={filteredTasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
+                <div className="space-y-3" data-testid="tasks-list">
+                  {filteredTasks.map((task) => (
+                    <SortableTaskRow
+                      key={task.id}
+                      task={task}
+                      onTaskUpdate={fetchTasks}
+                      currentUser={user}
+                      onLongPress={handleLongPress}
+                      selectMode={false}
+                      onClick={() => {}}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+          ) : (
           <div className="space-y-3" data-testid="tasks-list">
             {filteredTasks.map((task) => (
               <div key={task.id} className="flex items-start gap-3">
@@ -677,6 +840,7 @@ export default function TasksPage() {
               </div>
             ))}
           </div>
+          )
         ) : (
           <Card className="bg-white rounded-2xl border border-zinc-100 shadow-sm">
             <CardContent className="p-8 text-center">
