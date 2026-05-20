@@ -253,6 +253,7 @@ class Task(Base):
     is_deleted = Column(Boolean, default=False, index=True)
     is_overdue = Column(Boolean, default=False)
     is_notified = Column(Boolean, default=False)
+    advance_notice_sent = Column(Boolean, default=False)
     rejection_reason = Column(Text, nullable=True)
     is_late = Column(Boolean, default=False)
     is_archived = Column(Boolean, default=False, index=True)
@@ -260,6 +261,7 @@ class Task(Base):
     actual_time_taken = Column(Integer)
     parent_task_id = Column(String(36))
     template_id = Column(String(36))
+    sort_order = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=now_sl, index=True)
     updated_at = Column(DateTime, default=now_sl, onupdate=now_sl)
 
@@ -457,6 +459,9 @@ class CommentCreate(BaseModel):
     content: str
 
 class BulkDeleteRequest(BaseModel):
+    task_ids: List[str]
+
+class BulkAutoAssignRequest(BaseModel):
     task_ids: List[str]
 
 class CommentResponse(BaseModel):
@@ -955,6 +960,8 @@ def task_to_response(task: Task) -> dict:
         "actual_time_taken": task.actual_time_taken, "template_id": task.template_id,
         "parent_task_id": task.parent_task_id,
         "rejection_reason": task.rejection_reason,
+        "sort_order": task.sort_order or 0,
+        "advance_notice_sent": task.advance_notice_sent or False,
         "created_at": fmt(task.created_at), "updated_at": fmt(task.updated_at)
     }
 
@@ -990,7 +997,7 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
     now = now_sl()
     today = now.day
 
-    tasks = query.order_by(Task.created_at.desc()).all()
+    tasks = query.order_by(Task.sort_order.asc(), Task.created_at.desc()).all()
 
     # Batch query: fetch active (non-VERIFIED) sub-task for each parent task in one query
     all_task_ids = [t.id for t in tasks]
@@ -1068,8 +1075,8 @@ async def create_task(task_data: TaskCreate, db: Session = Depends(get_db),
     create_activity_log(db, task.id, current_user.id, current_user.name, "CREATED", f"Task created: {task.title}")
 
     if task.assigned_to:
-        await create_notification(db, task.assigned_to, "Task Starting Now",
-                                   f"{task.title}", task.id)
+        await create_notification(db, task.assigned_to, "TASK_ASSIGNED", "New Task Assigned",
+                                   f"You have been assigned: {task.title}", task.id)
     await manager.broadcast_to_all({"type": "task_created", "data": task_to_response(task)})
     return task_to_response(task)
 
@@ -1083,6 +1090,79 @@ async def bulk_delete_tasks(request: BulkDeleteRequest, db: Session = Depends(ge
     db.commit()
     await manager.broadcast_to_all({"type": "tasks_deleted", "data": {"ids": task_ids}})
     return {"message": f"Deleted {len(task_ids)} tasks"}
+
+class TaskReorderItem(BaseModel):
+    id: str
+    sort_order: int
+
+@api_router.put("/tasks/reorder")
+def reorder_tasks(
+    items: List[TaskReorderItem],
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["OWNER", "MANAGER"]))
+):
+    for item in items:
+        db.query(Task).filter(Task.id == item.id, Task.is_deleted == False).update(
+            {"sort_order": item.sort_order}
+        )
+    db.commit()
+    return {"message": "Reordered"}
+
+@api_router.post("/tasks/bulk-auto-assign")
+async def bulk_auto_assign_tasks(
+    request: BulkAutoAssignRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_roles(["OWNER", "MANAGER", "SUPERVISOR"]))
+):
+    if not request.task_ids:
+        raise HTTPException(status_code=400, detail="No tasks selected")
+
+    staff_list = db.query(User).filter(
+        User.role == "STAFF", User.status == "ACTIVE"
+    ).all()
+
+    if not staff_list:
+        raise HTTPException(status_code=400, detail="No active staff members found")
+
+    tasks = db.query(Task).filter(
+        Task.id.in_(request.task_ids),
+        Task.is_deleted == False
+    ).all()
+
+    assigned_counts = {}
+
+    for i, task in enumerate(tasks):
+        staff = staff_list[i % len(staff_list)]
+        old_assignee = task.assigned_to_name or "Unassigned"
+
+        task.assigned_to = staff.id
+        task.assigned_to_name = staff.name
+        task.status = "PENDING"
+        task.proof_photos = []
+        task.rejection_reason = None
+        task.started_at = None
+        task.completed_at = None
+        task.supervisor_verified_at = None
+        task.supervisor_verified_by = None
+        task.is_notified = False
+        task.advance_notice_sent = False
+
+        create_activity_log(db, task.id, current_user.id, current_user.name,
+                            "REASSIGNED",
+                            f"Auto-assigned from {old_assignee} to {staff.name}")
+
+        await create_notification(db, staff.id, "TASK_ASSIGNED", "Task Assigned",
+                                  f"You have been assigned: {task.title}", task.id)
+
+        assigned_counts[staff.name] = assigned_counts.get(staff.name, 0) + 1
+
+    db.commit()
+
+    for task in tasks:
+        await manager.broadcast_to_all({"type": "task_update", "data": task_to_response(task)})
+
+    summary = ", ".join(f"{name}: {count}" for name, count in assigned_counts.items())
+    return {"message": f"Assigned {len(tasks)} tasks — {summary}"}
 
 @api_router.get("/tasks/{task_id}")
 def get_task(task_id: str, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
@@ -1288,6 +1368,8 @@ async def reassign_subtask(task_id: str, staff_id: str, db: Session = Depends(ge
     task.completed_at = None
     task.supervisor_verified_at = None
     task.supervisor_verified_by = None
+    task.is_notified = False
+    task.advance_notice_sent = False
     db.commit()
     db.refresh(task)
     create_activity_log(db, task.id, current_user.id, current_user.name, "REASSIGNED",
@@ -1686,6 +1768,54 @@ async def send_scheduled_notifications():
         await asyncio.sleep(60)
 
 
+async def send_advance_notices():
+    """Send FCM push 12 hours before allocated_datetime to assigned user."""
+    while True:
+        try:
+            db = SessionLocal()
+            now = now_sl()
+            twelve_hours_ahead = now + timedelta(hours=12)
+
+            tasks_due = db.query(Task).filter(
+                Task.is_deleted == False,
+                Task.status == "PENDING",
+                Task.allocated_datetime != None,
+                Task.allocated_datetime <= twelve_hours_ahead,
+                Task.allocated_datetime > now,
+                Task.assigned_to != None,
+                Task.advance_notice_sent == False
+            ).all()
+
+            for task in tasks_due:
+                task.advance_notice_sent = True
+                db.commit()
+
+                try:
+                    time_str = task.allocated_datetime.strftime("%I:%M %p")
+                except Exception:
+                    time_str = "scheduled time"
+
+                await create_notification(
+                    db, task.assigned_to, "TASK_REMINDER", "Upcoming Task",
+                    f"'{task.title}' is scheduled at {time_str} — please prepare",
+                    task.id
+                )
+
+                fcm_tokens = db.query(FCMToken).filter(FCMToken.user_id == task.assigned_to).all()
+                for fcm_token in fcm_tokens:
+                    await send_fcm_notification(
+                        fcm_token.token,
+                        "Upcoming Task",
+                        f"'{task.title}' starts at {time_str} — please prepare"
+                    )
+                logger.info(f"Sent 12h advance notice for task: {task.title}")
+
+            db.close()
+        except Exception as e:
+            logger.error(f"Error sending advance notices: {e}")
+        await asyncio.sleep(60)
+
+
 async def check_overdue_tasks():
     """Check for overdue tasks. All datetimes are naive SL — same reference as DB."""
     while True:
@@ -1786,6 +1916,7 @@ async def startup_event():
     asyncio.create_task(check_overdue_tasks())
     asyncio.create_task(generate_recurring_tasks())
     asyncio.create_task(send_scheduled_notifications())
+    asyncio.create_task(send_advance_notices())
 
 def seed_default_data():
     db = SessionLocal()
