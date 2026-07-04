@@ -690,6 +690,7 @@ export default function TaskLibraryPage() {
 function TemplateCard({ template, onEdit, onDelete, onToggle }) {
   const isRecurring = template.is_recurring;
   const isActive = template.is_active !== false;
+  const [titleExpanded, setTitleExpanded] = useState(false);
 
   return (
     <Card className={`bg-white rounded-2xl border shadow-sm ${!isActive ? 'opacity-60' : ''} ${isRecurring ? 'border-l-4 border-l-blue-400' : 'border-zinc-100'}`}>
@@ -697,7 +698,13 @@ function TemplateCard({ template, onEdit, onDelete, onToggle }) {
         <div className="flex items-start justify-between gap-3">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <p className="font-medium text-zinc-900 line-clamp-1">{template.title}</p>
+              <p
+                className={`font-medium text-zinc-900 cursor-pointer ${titleExpanded ? "" : "line-clamp-1"}`}
+                onClick={(e) => { e.stopPropagation(); setTitleExpanded((v) => !v); }}
+                title={template.title}
+              >
+                {template.title}
+              </p>
               {isRecurring && (
                 <Badge className={isActive ? 'bg-blue-100 text-blue-700' : 'bg-zinc-100 text-zinc-500'}>
                   {isActive ? 'Active' : 'Paused'}
