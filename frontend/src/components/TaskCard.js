@@ -64,6 +64,7 @@ export default function TaskCard({
   selectMode,
 }) {
   const [loading, setLoading] = useState(false);
+  const [titleExpanded, setTitleExpanded] = useState(false);
   const [uploadingProof, setUploadingProof] = useState(false);
   const [showProofModal, setShowProofModal] = useState(false);
   const [enlargedPhoto, setEnlargedPhoto] = useState(null);
@@ -500,8 +501,10 @@ export default function TaskCard({
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <h3
-                className={`font-semibold line-clamp-1 ${isNotCompleted || isOverdue ? "text-red-700" : "text-zinc-900"}`}
+                className={`font-semibold cursor-pointer ${titleExpanded ? "" : "line-clamp-1"} ${isNotCompleted || isOverdue ? "text-red-700" : "text-zinc-900"}`}
                 data-testid="task-card-title"
+                onClick={(e) => { e.stopPropagation(); setTitleExpanded((v) => !v); }}
+                title={task.title}
               >
                 {task.title}
               </h3>
