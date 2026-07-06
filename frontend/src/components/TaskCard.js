@@ -72,7 +72,7 @@ export default function TaskCard({
   const [showCamera, setShowCamera] = useState(false);
   const [capturedPhotos, setCapturedPhotos] = useState([]); // [{dataUrl, blob}]
   const webcamRef = useRef(null);
-  const MAX_PHOTOS = 5;
+  const MAX_PHOTOS = 9;
   const [staffList, setStaffList] = useState([]);
   const [assignLoading, setAssignLoading] = useState(false);
   const assignRef = useRef(null);

@@ -115,7 +115,7 @@ export default function TaskDetailPage() {
   const [showCamera, setShowCamera] = useState(false);
   const [capturedPhotos, setCapturedPhotos] = useState([]);
   const webcamRef = useRef(null);
-  const MAX_PHOTOS = 5;
+  const MAX_PHOTOS = 9;
 
   const fetchTaskData = useCallback(async () => {
     try {
@@ -739,7 +739,7 @@ export default function TaskDetailPage() {
               </div>
 
               {hasProofPhotos ? (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="grid grid-cols-2 gap-2 max-h-[60vh] overflow-y-auto pr-1">
                   {task.proof_photos.map((photoUrl, index) => (
                     <ProofPhotoItem
                       key={index}

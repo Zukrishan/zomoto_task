@@ -3,7 +3,7 @@ from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import FileResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
-from sqlalchemy import create_engine, Column, String, Text, DateTime, Boolean, Integer, ForeignKey, Enum as SQLEnum, JSON, Date
+from sqlalchemy import create_engine, Column, String, Text, DateTime, Boolean, Integer, ForeignKey, Enum as SQLEnum, JSON, Date, func
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship, Session
 from sqlalchemy.pool import QueuePool
@@ -987,7 +987,7 @@ def get_tasks(status: str = None, category: str = None, priority: str = None, as
     if status:
         query = query.filter(Task.status == status)
     if category:
-        query = query.filter(Task.category == category)
+        query = query.filter(func.lower(func.trim(Task.category)) == category.strip().lower())
     if priority:
         query = query.filter(Task.priority == priority)
     if assigned_to:
@@ -1537,7 +1537,7 @@ def get_task_reports(
     if status:
         query = query.filter(Task.status == status)
     if category:
-        query = query.filter(Task.category == category)
+        query = query.filter(func.lower(func.trim(Task.category)) == category.strip().lower())
     if priority:
         query = query.filter(Task.priority == priority)
     if assigned_to:
